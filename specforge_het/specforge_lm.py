@@ -31,8 +31,9 @@ class SpecForgeLM():
     def from_basemodel(cls, base_config, base_model_path=None,
                        *, AlgoClass=None, algo_kwargs={}, **kwargs):
         if AlgoClass is None:
-            import beagle.models
-            AlgoClass = eval('beagle.models.' + base_config.speculative_decoding_algorithm)
+            import specforge_het.models
+            AlgoClass = eval('specforge_het.models.'
+                + base_config.speculative_decoding_algorithm)
         if base_model_path is None:
             base_model_path = base_config.speculative_decoding_base_model_path
 
@@ -62,8 +63,9 @@ class SpecForgeLM():
     def load_speculative_model(cls, path, **kwargs):
         config = AutoConfig.from_pretrained(path)
         model = cls.from_basemodel(config, **kwargs)
-        import beagle.models
-        DrafterClass = eval('beagle.models.' + model.config.speculative_decoding_draft_model)
+        import specforge_het.models
+        DrafterClass = eval('specforge_het.models.'
+            + model.config.speculative_decoding_draft_model)
         draft_config = AutoConfig.from_pretrained(f'{path}/draft_model', trust_remote_code=True)
         draft_model = DrafterClass(draft_config, model.config)
         model.set_draft_model(draft_model)

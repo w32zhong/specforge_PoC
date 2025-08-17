@@ -13,68 +13,6 @@ from specforge_het.configs import Configs
 from specforge_het.model_load import load_models
 
 
-def example_eval_dataset(tokenizer, model, query=None, as_generation_prompt=False, conv=None):
-    if query is None:
-        query = "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?"
-
-    if conv is None:
-        conv = [
-            dict(role='user', content=query),
-            dict(
-                role='assistant',
-                content="""There could be several reasons why Thomas, despite being healthy, has to visit the hospital daily.
-Here are some possibilities:
-* Profession: Thomas might work at the hospital as a doctor, nurse, technician, administrator, or in another role.
-* Volunteer Work: He could be volunteering at the hospital to help patients or assist with administrative tasks.
-* Medical Research: Thomas might be participating in or conducting clinical trials or medical research.
-* Caregiving: He may have a family member or close friend who is hospitalized and needs daily support or care.
-* Training or Education: If Thomas is a medical student, intern, or trainee, he may need to be at the hospital daily for learning and practice.
-* Exercise: Some hospitals have fitness or wellness centers, and Thomas might go there to use the facilities.
-* Community Programs: He could be attending workshops, classes, or support groups held at the hospital.
-* Routine Checkups: Thomas might be donating blood, plasma, or platelets regularly, which requires frequent hospital visits.
-Do any of these seem like they might fit Thomas's situation? """
-            )
-        ]
-
-    if as_generation_prompt:
-        conv = conv[:1]
-
-    inputs = tokenizer.apply_chat_template(conv,
-        tokenize=True, return_tensors="pt", return_dict=True,
-        add_generation_prompt=as_generation_prompt,
-        return_assistant_tokens_mask=True)
-
-    input_ids = inputs.input_ids
-    attention_mask = inputs.attention_mask
-    answer_mask = torch.tensor(inputs.assistant_masks).reshape(*input_ids.shape)
-    assert answer_mask.sum().item() > 0
-
-    debug_print_chat_turns(tokenizer, input_ids[0], answer_mask[0])
-
-    labels = input_ids.clone()
-    labels[0 == answer_mask] = -100
-
-    with torch.no_grad():
-        device = next(model.parameters()).device
-        encoder_outputs = model(
-            input_ids=input_ids.to(device),
-            attention_mask=attention_mask.to(device),
-            use_cache=False, return_dict=True
-        )
-        tensors = encoder_outputs.last_hidden_state
-
-    def generator():
-        yield dict(
-            input_ids=inputs.input_ids[0],
-            attention_mask=inputs.attention_mask[0],
-            encoder_outputs=tensors[0],
-            labels=labels[0],
-            data_ids='eval_example'
-        )
-
-    return Dataset.from_generator(generator)
-
-
 def map_shargpt_fn(j):
     conversations = j['conversations']
 
