@@ -37,16 +37,6 @@ class MyCustomTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.eval_data_collator = eval_data_collator
 
-    #def _get_train_sampler(self):
-    #    #return None # no shuffle
-    #    return super()._get_train_sampler()
-
-    #def get_train_dataloader(self):
-    #    data_loader = super().get_train_dataloader()
-    #    #num_tokens = self.num_tokens(data_loader) * self.args.num_train_epochs # 24,978,726
-    #    #num_sample = self.num_examples(data_loader) * self.args.num_train_epochs
-    #    return data_loader
-
     def get_eval_dataloader(self, eval_dataset):
         dataloader_params = {
             "batch_size": 1,
@@ -61,45 +51,6 @@ class MyCustomTrainer(Trainer):
         model = self.model
         model.eval()
 
-        #model.prepare_training()
-        #if model.lazy_sd is not None:
-        #    # sanity check
-        #    from accelerate.utils import DistributedType
-        #    assert self.accelerator.distributed_type == DistributedType.DEEPSPEED
-        #    import deepspeed
-        #    deepspeed_engine = self.model_wrapped
-
-        #    # lazy loading the SD decoder
-        #    sd = model.lazy_sd['speculative_decoder']
-        #    with deepspeed.zero.GatheredParameters(
-        #        model.speculative_decoder.parameters(), modifier_rank=0):
-        #        if deepspeed.comm.get_rank() == 0:
-        #            model.speculative_decoder.load_state_dict(sd, strict=True)
-
-        #    # Important for reset the right parameters after training the 1st step.
-        #    # see deepspeed/runtime/engine.py:load_checkpoint(load_module_only=True)
-        #    deepspeed_engine.optimizer.refresh_fp32_params()
-
-        #    ## DEBUG: inspect deepspeed loaded weights!
-        #    #rank = deepspeed.comm.get_rank()
-        #    #world_size = deepspeed.comm.get_world_size()
-        #    #with deepspeed.zero.GatheredParameters(deepspeed_engine.parameters()):
-        #    #    if rank == 0:
-        #    #        for key, val in sd.items():
-        #    #            submodule_path = key.replace('.weight', '')
-        #    #            model_w = model.speculative_decoder.get_submodule(
-        #    #                          submodule_path).weight.cpu()
-        #    #            assert torch.allclose(model_w, val)
-        #    #        breakpoint()
-        #    #deepspeed.comm.barrier()
-
-        #    # make sure we only gonna load once (in eval_on_start)
-        #    del model.lazy_sd
-        #    model.lazy_sd = None
-
-        #    # make sure eval_on_start will comply the same logics
-        #    self.control.should_evaluate=True
-
         if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
             self.optimizer.eval()
         for eval_idx, inputs in enumerate(dataloader):
@@ -113,46 +64,6 @@ class MyCustomTrainer(Trainer):
         # set flag False to indicate finishing eval loop early, because some eval-loop calls
         # like self.get_batch_samples() are invoked earlier than this flag is reset.
         self.control.should_evaluate = False
-
-    #def get_batch_samples(self, epoch_iterator, accumulation_steps, device=None):
-    #    # only be called by train_loop not evaluation_loop!
-    #    batch_samples = []
-    #    num_items_in_batch = None
-    #    for _ in range(accumulation_steps):
-    #        try:
-    #            batch_samples += [next(epoch_iterator)]
-    #        except StopIteration:
-    #            break
-
-    #    if len(batch_samples) > 0:
-    #        num_items_in_batch = self.get_num_items_in_batch(batch_samples)
-    #    # in rare cases, len(batch_samples) can be zero right at the end of an epoch,
-    #    # we will keep num_items_in_batch=None so that Trainer will skip this batch.
-
-    #    # save per-device num_items_in_batch before being reduced
-    #    self.device_num_items_in_batch = num_items_in_batch
-
-    #    if self.args.average_tokens_across_devices:
-    #    # will do in trainer.py: loss *= self.accelerator.num_processes before
-    #    # self.accelerator.backward(loss, **kwargs) to cannel default's
-    #    # gradients mean reduce, then, immediately following backward(),
-    #    # loss.detach() / self.args.gradient_accumulation_steps to report
-    #    # the original process returned loss at each accumulation update.
-    #        world = int(os.environ.get("WORLD_SIZE", 1))
-    #        gather_vals = [num_items_in_batch for _ in range(world)]
-    #        if world > 1:
-    #            dist.all_gather_object(gather_vals, num_items_in_batch)
-    #        def item(x):
-    #            if isinstance(x, torch.Tensor):
-    #                return x.item()
-    #            else:
-    #                return x
-    #        if None not in gather_vals:
-    #            num_items_in_batch = sum([item(x) for x in gather_vals])
-    #        else:
-    #            num_items_in_batch = None # skip this batch on this device
-
-    #    return batch_samples, num_items_in_batch
 
 
 def train_eagle_pipeline(configs, run_name, tokenizer, model,
