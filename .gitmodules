@@ -1,0 +1,4 @@
+[submodule "eagle_v2"]
+	path = eagle_v2
+	url = https://github.com/w32zhong/EAGLE.git
+	branch = v2
