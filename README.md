@@ -1,6 +1,8 @@
 # specforge PoC
 This is a Proof-of-Concept implementation for speculative decoding framework that supports heterogeneous (het.) base and draft models.
 
+For a demo of what is heterogeneous models, refer to the [demo.py](./demo.py) file.
+
 ## Training Data Generation (Optional)
 Generate dataset (use `--dataset_generation.output_dir` to specify an alternative output directory):
 ```sh
