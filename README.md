@@ -16,7 +16,11 @@ python -m specforge_het.data_gen merge_datasets \
 
 ## Training
 ```sh
-CUDA_VISIBLE_DEVICES=0 python -m specforge_het.train --dataset.path /mnt/asus_card/temp_llama_dataset/datasets/ds_Llama-2-7b-chat-hf/ --training.eval_strategy no --modeling.dtype torch.float32 --@llama2_7b_base_and_llama2_7b_drafter_using_eagle2 # --training.report_to wandb --training.project eagle4
+CUDA_VISIBLE_DEVICES=0 python -m specforge_het.train \
+    --dataset.path /mnt/asus_card/temp_llama_dataset/datasets/ds_Llama-2-7b-chat-hf/
+    --training.eval_strategy no --modeling.dtype torch.float32 \
+    --@llama2_7b_base_and_llama2_7b_drafter_using_eagle2 \
+    # --training.report_to wandb --training.project eagle4
 ```
 
 If you choose to use EAGLE-format offline-training data, replace `--dataset.path <path>` to `--dataset.read_eagle_format --dataset.path <path/to/sharegpt_0_67999_mufp16>`
