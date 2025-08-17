@@ -1,0 +1,8 @@
+__pycache__/
+output/
+wandb/
+logs/
+.env
+*.log
+*.swp
+*.lock

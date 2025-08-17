@@ -1,0 +1,8 @@
+transformers==4.54.1
+accelerate
+fire
+wandb
+tqdm
+colorama
+sentencepiece
+deepspeed

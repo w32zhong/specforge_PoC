@@ -1,0 +1,3 @@
+from .algorithms.eagle_v2 import EagleV2
+from .speculative_llama.modeling_speculative_llama import SpeculativeLlamaForCausalLM, LlamaDrafter
+from .speculative_qwen3_moe.modeling_speculative_qwen3_moe import SpeculativeQwen3MoeForCausalLM, Qwen3MoeDrafter
