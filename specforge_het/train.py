@@ -250,9 +250,6 @@ def extract_training_args(run_name, configs):
     else:
         training_args = TrainingArguments(**training_args)
 
-    if configs.force_model_parallel:
-        training_args._n_gpu = 1
-
     return training_args
 
 
@@ -360,15 +357,6 @@ def main(config_file='configs.ini', **injects):
 
     train(configs.training, hgf_training_args,
           run_name, tokenizer, model, *datasets_and_collators)
-
-    # save final tokenizer, model, and modeling files
-    model_filenames = set([v.split('.')[0] for v in model.config.auto_map.values()])
-    modeling_path = configs.modeling.model_path
-    if rank == 0:
-        tokenizer.save_pretrained(output_dir)
-        model.save_pretrained(output_dir)
-        for filename in model_filenames:
-            shutil.copy(os.path.join(modeling_path, f"{filename}.py"), output_dir)
 
 
 if __name__ == '__main__':
