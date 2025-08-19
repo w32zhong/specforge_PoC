@@ -189,7 +189,6 @@ class SpecForgeLM():
                            if hasattr(self, 'trainer') else self.accelerator)
             flush = accelerator.sync_gradients
             self.update_step += (1 if flush else 0)
-        #print('[backward]', forward_output['loss'].item())
         self.training_collect_and_log(metrics, flush=flush)
 
         return forward_output

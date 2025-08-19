@@ -37,19 +37,20 @@ class EagleV2:
         return data
 
     def speculative_forward(self, input_ids, encoder_outputs, target_hiddens, **kwargs):
-        inputs_embeds = self.get_token_embedding(input_ids)
+        with torch.no_grad():
+            inputs_embeds = self.get_token_embedding(input_ids)
         device, dtype = inputs_embeds.device, inputs_embeds.dtype
 
         prev_encoder_hidden_states = encoder_outputs.to(device=device, dtype=dtype)
         next_encoder_hidden_states = target_hiddens.to(device=device, dtype=dtype)
 
-        inputs_embeds = self.draft_model.eagle_fc(
+        inputs_embeds_concate = self.draft_model.eagle_fc(
             torch.cat((inputs_embeds, prev_encoder_hidden_states), dim=-1)
         )
 
         decoder_outputs = self.draft_model(
             input_ids=None,
-            inputs_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds_concate,
             **kwargs,
         )
         predict = decoder_outputs[0]
