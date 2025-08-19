@@ -74,6 +74,6 @@ class EagleV2:
         #loss = ploss + 10 * vloss # align with LM losses instead of (0.1 * ploss + vloss)
         loss = 0.1 * ploss + vloss
         return (
-            dict(loss=loss, decoder_outputs=decoder_outputs),
+            dict(loss=loss, decoder_outputs=decoder_outputs, attention_mask=kwargs['attention_mask']),
             dict(loss=loss, ploss=ploss, vloss=vloss, _num_items_in_batch=num_items_in_batch)
         )

@@ -148,6 +148,8 @@ def train(configs, hgf_training_args, run_name, tokenizer, model,
         model.to(f'cuda:{rank}')
 
     def EAGLE_training_data_adapter(*args, **kwargs):
+        kwargs['output_router_logits'] = True
+
         if 'target_hiddens' not in kwargs: # raw data, no offset yet
             data = model.eagle_data_offset(data=kwargs)
             data['encoder_outputs'] += model.eagle_noise(data['encoder_outputs'])

@@ -1,6 +1,7 @@
 import copy
 import torch
 from transformers.models.qwen3_moe.modeling_qwen3_moe import *
+from transformers.models.qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
 from specforge_het.specforge_lm import SpecForgeLM
 
 
@@ -44,3 +45,17 @@ class SpeculativeQwen3MoeForCausalLM(SpecForgeLM, Qwen3MoeForCausalLM):
 
     def save_pretrained(self, path, **kwargs):
         return self.save_speculative_model(path, **kwargs)
+
+    def auxiliary_training_process(self, forward_output, metrics):
+        loss = forward_output.pop('loss')
+        router_logits = forward_output['decoder_outputs'].router_logits
+        lb_loss = load_balancing_loss_func(
+            router_logits,
+            self.num_experts,
+            self.num_experts_per_tok,
+            forward_output['attention_mask']
+        ).to(loss.device)
+        metrics['lb_loss'] = lb_loss
+        loss += self.router_aux_loss_coef * lb_loss
+        forward_output['loss'] = loss
+        metrics['loss'] = loss

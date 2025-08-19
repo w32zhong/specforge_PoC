@@ -3,6 +3,12 @@ This is a Proof-of-Concept implementation for speculative decoding framework tha
 
 For a demo of what is heterogeneous models, refer to the [demo.py](./demo.py) file.
 
+## Setup
+```
+git submodule update --init --recursive --progress
+pip install -r specforge_het/requirements.txt
+```
+
 ## Training Data Generation (Optional)
 Generate dataset (use `--dataset_generation.output_dir` to specify an alternative output directory):
 ```sh
@@ -26,3 +32,5 @@ CUDA_VISIBLE_DEVICES=0 python -m specforge_het.train \
 ```
 
 If you choose to use EAGLE-format offline-training data, replace `--dataset.path <path>` to `--dataset.read_eagle_format --dataset.path <path/to/sharegpt_0_67999_mufp16>`
+
+To add evaluation data: `--dataset.eval_path <path>`.
