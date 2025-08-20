@@ -1,0 +1,29 @@
+# find tags at https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch
+FROM nvcr.io/nvidia/pytorch:25.06-py3
+WORKDIR /workspace
+# install utilities
+RUN apt update && apt install -y git tmux ncdu vim npm
+# setup dotfiles
+RUN bash -c "git clone https://github.com/t-k-cloud/tkarch.git && \
+    pushd tkarch && cd dotfiles && ./overwrite.sh && \
+    popd && rm -rf tkarch/.git"
+# install nvitop
+RUN pip install nvitop
+# install nvim
+RUN curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz && \
+    tar -xzf nvim-linux-x86_64.tar.gz && ln -sf `pwd`/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
+# install node and LSP
+RUN wget https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh && \
+    bash install.sh && source ~/.nvm/nvm.sh && nvm install v24.5.0
+RUN npm install -g pyright
+# install uv
+ADD https://astral.sh/uv/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && rm /uv-installer.sh
+ENV PATH="/root/.local/bin/:$PATH"
+# install dependencies
+ARG MODEL
+ADD . proj/
+RUN pip install -r proj/${MODEL}/requirements.txt
+# finalize
+WORKDIR /workspace/proj
+CMD /bin/bash
