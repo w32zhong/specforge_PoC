@@ -301,7 +301,8 @@ def main(config_file='configs.ini', **injects):
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    # use a more input-insentive scaled-dot-product kernel
+
+    # use a more input-insentive scaled-dot-product kernel?
     torch.backends.cuda.enable_cudnn_sdp(False)
     torch.backends.cuda.sdp_kernel(
         enable_flash=True, enable_mem_efficient=True, enable_math=True

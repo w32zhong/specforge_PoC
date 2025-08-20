@@ -36,7 +36,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         model = eval(base_class_name).from_basemodel(
             base_config, base_model_path,
             AlgoClass=eval(algo_class_name), algo_kwargs=eval(algo_kwargs),
-            _fast_init=False, device_map="auto", torch_dtype=torch.bfloat16
+            _fast_init=False, **kwargs
         )
         if freeze_base_model:
             freeze_model(model)

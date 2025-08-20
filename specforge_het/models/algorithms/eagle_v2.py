@@ -8,18 +8,18 @@ class EagleV2:
         self.config.skip_output_norm = skip_output_norm
 
     def on_draft_model_set(self):
-        base_hidden_size = self.get_hidden_size()
-        draft_hidden_size = self.draft_model.get_hidden_size()
-        self.draft_model.eagle_fc = torch.nn.Linear(
-            2 * base_hidden_size, draft_hidden_size, bias=True
-        )
-        self.smooth_l1 = torch.nn.SmoothL1Loss(reduction="none")
-
         if len(self.get_base_layers()) > 0:
             last_device = next(self.get_base_layers()[-1].parameters()).device
         else:
             last_device = self.device
-        self.draft_model.to(last_device)
+
+        base_hidden_size = self.get_hidden_size()
+        draft_hidden_size = self.draft_model.get_hidden_size()
+        self.draft_model.eagle_fc = torch.nn.Linear(
+            2 * base_hidden_size, draft_hidden_size, bias=True,
+            device=last_device, dtype=self.base_model.dtype
+        )
+        self.smooth_l1 = torch.nn.SmoothL1Loss(reduction="none")
 
     @staticmethod
     def eagle_noise(tensor):
