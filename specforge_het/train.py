@@ -301,6 +301,11 @@ def main(config_file='configs.ini', **injects):
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+    # use a more input-insentive scaled-dot-product kernel
+    torch.backends.cuda.enable_cudnn_sdp(False)
+    torch.backends.cuda.sdp_kernel(
+        enable_flash=True, enable_mem_efficient=True, enable_math=True
+    )
 
     wandb = None
     if rank == 0:
@@ -350,13 +355,13 @@ def main(config_file='configs.ini', **injects):
         model_init_dict = torch.load(configs.training.model_init_ckpt, weights_only=False)
         converted_dict = dict()
         for key, val in model_init_dict.items():
-            if key.startswith('fc.'):
-                converted_dict[key.replace('fc.', 'eagle_fc.')] = val
-            elif key.startswith('embed_tokens.'):
-                continue
+            if key.startswith('eagle_fc.'):
+                converted_dict[key.replace('eagle_fc.', '_draft_model.eagle_fc.')] = val
+            elif key.startswith('speculative_decoder.'):
+                converted_dict[key.replace('speculative_decoder.', '_draft_model.')] = val
             else:
                 converted_dict[key] = val
-        model.draft_model.load_state_dict(converted_dict, strict=True)
+        model.load_state_dict(converted_dict, strict=True)
 
     datasets_and_collators = data_load(configs.dataset)
 

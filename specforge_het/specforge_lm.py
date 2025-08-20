@@ -8,6 +8,8 @@ from colorama import Fore, Style
 
 
 class SpecForgeLM():
+    draft_model_path_prefix = '_draft_model'
+
     ### Speculative LM base methods ###
     @property
     def base_model(self):
@@ -15,11 +17,11 @@ class SpecForgeLM():
 
     @property
     def draft_model(self):
-        return self._draft_model
+        return getattr(self, self.draft_model_path_prefix)
 
     def set_draft_model(self, model):
         self.config.speculative_decoding_draft_model = model.__class__.__name__
-        self._draft_model = model
+        setattr(self, self.draft_model_path_prefix, model)
         self.on_draft_model_set()
 
     @classmethod

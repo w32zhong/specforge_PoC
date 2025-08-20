@@ -28,6 +28,15 @@ def cmp_tensor_w_another(tensor):
     torch.save(tensor, '/tmp/debug_cmp_tensor_w_another.pt')
 
 
+def test_nan_grad(model):
+    import torch
+    for name, param in model.named_parameters():
+        if param.grad is not None and torch.any(param.grad.isnan()):
+            print(name, param.grad)
+            return True
+    return False
+
+
 def hook_fn(model, tokenizer, path, module, inputs, output):
     if 'embed_tokens' in path or re.match(r'layers.\d+$', path):
         output = output[0] if isinstance(output, tuple) else output

@@ -57,5 +57,6 @@ class SpeculativeQwen3MoeForCausalLM(SpecForgeLM, Qwen3MoeForCausalLM):
         ).to(loss.device)
         metrics['lb_loss'] = lb_loss
         loss += self.router_aux_loss_coef * lb_loss
+
         forward_output['loss'] = loss
         metrics['loss'] = loss

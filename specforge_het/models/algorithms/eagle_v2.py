@@ -58,22 +58,29 @@ class EagleV2:
         with torch.no_grad():
             target_logits = self.get_token_logits(next_encoder_hidden_states)
             target_p = torch.nn.Softmax(dim=2)(target_logits)
-            pred_logits = self.get_token_logits(predict)
 
         labels = kwargs['labels']
         loss_mask = (labels != -100)
         loss_mask[:, -1] = 0
         loss_mask = loss_mask[:, :, None]
 
+        pred_logits = self.get_token_logits(predict)
         pred_logp = torch.nn.LogSoftmax(dim=2)(pred_logits)
         plogp = target_p * pred_logp
         num_items_in_batch = kwargs.get('num_items_in_batch', loss_mask.sum())
         ploss = -torch.sum(torch.sum(loss_mask * plogp, 2)) / (num_items_in_batch + 1e-5)
+
+        ## DEBUG 
+        #from specforge_het.debug import test_nan_grad
+        #ploss.backward()
+        #assert not test_nan_grad(self)
+
         vloss = self.smooth_l1(predict, next_encoder_hidden_states)
         vloss = torch.sum(torch.mean(loss_mask * vloss, 2)) / (num_items_in_batch + 1e-5)
 
         #loss = ploss + 10 * vloss # align with LM losses instead of (0.1 * ploss + vloss)
         loss = 0.1 * ploss + vloss
+
         return (
             dict(loss=loss, decoder_outputs=decoder_outputs, attention_mask=kwargs['attention_mask']),
             dict(loss=loss, ploss=ploss, vloss=vloss, _num_items_in_batch=num_items_in_batch)

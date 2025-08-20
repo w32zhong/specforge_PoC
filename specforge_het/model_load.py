@@ -14,10 +14,17 @@ print(transformers.__path__)
 print(transformers.__version__)
 
 
-def load_speculative_model_if_possible(configs, free_base_model_layers=False, **kwargs):
+def freeze_model(model):
+    for param_path, param in model.named_parameters():
+        param.requires_grad = False
+
+
+def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs):
     try:
         model = AutoModelForCausalLM.from_pretrained(configs.model_path,
             trust_remote_code=True, **kwargs)
+        if freeze_base_model:
+            freeze_model(model)
 
     except Exception as e:
         # base model
@@ -31,6 +38,8 @@ def load_speculative_model_if_possible(configs, free_base_model_layers=False, **
             AlgoClass=eval(algo_class_name), algo_kwargs=eval(algo_kwargs),
             _fast_init=False, device_map="auto", torch_dtype=torch.bfloat16
         )
+        if freeze_base_model:
+            freeze_model(model)
 
         # (uninitialized) draft model
         draft_class_name, draft_config_path = configs.init_draft_config
