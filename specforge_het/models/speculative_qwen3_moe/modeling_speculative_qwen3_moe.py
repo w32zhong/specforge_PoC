@@ -51,12 +51,12 @@ class SpeculativeQwen3MoeForCausalLM(SpecForgeLM, Qwen3MoeForCausalLM):
         router_logits = forward_output['decoder_outputs'].router_logits
         lb_loss = load_balancing_loss_func(
             router_logits,
-            self.num_experts,
-            self.num_experts_per_tok,
+            self.draft_model.config.num_experts,
+            self.draft_model.config.num_experts_per_tok,
             forward_output['attention_mask']
         ).to(loss.device)
         metrics['lb_loss'] = lb_loss
-        loss += self.router_aux_loss_coef * lb_loss
+        loss += self.draft_model.config.router_aux_loss_coef * lb_loss
 
         forward_output['loss'] = loss
         metrics['loss'] = loss
