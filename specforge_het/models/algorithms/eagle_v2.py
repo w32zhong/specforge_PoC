@@ -13,10 +13,9 @@ class EagleV2:
         else:
             last_device = self.device
 
-        base_hidden_size = self.get_hidden_size()
-        draft_hidden_size = self.draft_model.get_hidden_size()
+        hidden_size = self.get_hidden_size()
         self.draft_model.eagle_fc = torch.nn.Linear(
-            2 * base_hidden_size, draft_hidden_size, bias=True,
+            2 * hidden_size, hidden_size, bias=True,
             device=last_device, dtype=self.base_model.dtype
         )
         self.smooth_l1 = torch.nn.SmoothL1Loss(reduction="none")

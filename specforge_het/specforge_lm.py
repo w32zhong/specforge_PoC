@@ -173,15 +173,13 @@ class SpecForgeLM():
         self.update_step = -1
         self.train()
 
-    def auxiliary_training_process(self, forward_output, metrics):
-        pass
-
     def training_forward(self, *args, **kwargs):
         if self.training_data_adapter:
             args, kwargs, data_metrics = self.training_data_adapter(*args, **kwargs)
 
         forward_output, metrics = self.speculative_forward(*args, **kwargs)
-        self.auxiliary_training_process(forward_output, metrics)
+        if hasattr(self.draft_model, 'auxiliary_training_process'):
+            self.draft_model.auxiliary_training_process(forward_output, metrics)
 
         metrics = dict(**metrics, **data_metrics)
         if self.is_eval_loop:

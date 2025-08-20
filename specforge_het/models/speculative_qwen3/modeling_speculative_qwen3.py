@@ -5,17 +5,18 @@ from specforge_het.specforge_lm import SpecForgeLM
 
 
 class Qwen3Drafter(Qwen3Model):
-    def __init__(self, draft_config, base_config):
+    def __init__(self, draft_config, base_model):
         draft_config = copy.deepcopy(draft_config)
-        draft_config.num_hidden_layers = base_config.draft_layers
+        draft_config.num_hidden_layers = base_model.config.draft_layers
+        draft_config.hidden_size = base_model.get_hidden_size()
         super().__init__(draft_config)
 
-        if base_config.skip_input_layernorm:
+        if base_model.config.skip_input_layernorm:
             for layer in self.layers:
                 delattr(layer, 'input_layernorm')
                 layer.input_layernorm = torch.nn.Identity()
 
-        if base_config.skip_output_norm:
+        if base_model.config.skip_output_norm:
             delattr(self, 'norm')
             self.norm = torch.nn.Identity()
 

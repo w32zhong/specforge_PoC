@@ -17,7 +17,7 @@ if not os.path.exists('./output/temp_save'):
     )
     draft_config_path = 'meta-llama/Llama-2-7b-chat-hf'
     draft_config = AutoConfig.from_pretrained(draft_config_path)
-    draft_model = LlamaDrafter(draft_config, model.config)
+    draft_model = LlamaDrafter(draft_config, model)
     model.set_draft_model(draft_model)
     model.save_pretrained('./output/temp_save')
 

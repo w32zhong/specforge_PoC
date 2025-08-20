@@ -44,7 +44,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         # (uninitialized) draft model
         draft_class_name, draft_config_path = configs.init_draft_config
         draft_config = AutoConfig.from_pretrained(draft_config_path)
-        draft_model = eval(draft_class_name)(draft_config, model.config)
+        draft_model = eval(draft_class_name)(draft_config, model)
 
         # attach draft model for the specified algorithm
         model.set_draft_model(draft_model)
