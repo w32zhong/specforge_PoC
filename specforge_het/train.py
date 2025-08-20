@@ -37,6 +37,13 @@ class MyCustomTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.eval_data_collator = eval_data_collator
 
+    def _get_train_sampler(self, dataset):
+        from torch.utils.data import SequentialSampler, RandomSampler
+        if self.model.training_configs.sequential_loading:
+            return SequentialSampler(self.train_dataset)
+        else:
+            return RandomSampler(self.train_dataset)
+
     def get_eval_dataloader(self, eval_dataset):
         dataloader_params = {
             "batch_size": 1,

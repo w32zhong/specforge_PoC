@@ -99,4 +99,5 @@ def data_load(dataset_configs):
     if max_read_items:
         train_dataset = train_dataset.select(range(max_read_items))
 
+    print('[training data preview]', train_dataset[:10]['data_ids'], '...')
     return [train_dataset, train_collator, eval_dataset, eval_collator]
