@@ -1,4 +1,3 @@
-import copy
 import torch
 from transformers.models.qwen3_moe.modeling_qwen3_moe import *
 from transformers.models.qwen3_moe.modeling_qwen3_moe import load_balancing_loss_func
@@ -7,7 +6,6 @@ from specforge_het.specforge_lm import SpecForgeLM
 
 class Qwen3MoeDrafter(Qwen3MoeModel):
     def __init__(self, draft_config, base_model):
-        draft_config = copy.deepcopy(draft_config)
         draft_config.num_hidden_layers = base_model.config.draft_layers
         draft_config.hidden_size = base_model.get_hidden_size()
         super().__init__(draft_config)

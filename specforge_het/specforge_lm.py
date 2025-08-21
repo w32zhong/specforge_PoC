@@ -48,7 +48,9 @@ class SpecForgeLM():
         sub_classes = (*cls.__bases__[::-1], AlgoClass)
         ns = {k: v for k, v in cls.__dict__.items() if not k.startswith('__')}
         derived_cls = type(cls.__name__, sub_classes, ns)
-        model = derived_cls.from_pretrained(base_model_path, config=base_config, **kwargs)
+        # base model: use default dtype etc.
+        model = derived_cls.from_pretrained(base_model_path, config=base_config,
+                                            device_map="auto")
         model.modeling_file = sys.modules[cls.__module__].__file__
         merge_kwargs = base_config.to_dict()
         merge_kwargs.update(algo_kwargs)

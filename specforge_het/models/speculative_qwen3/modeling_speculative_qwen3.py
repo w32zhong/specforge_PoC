@@ -1,4 +1,3 @@
-import copy
 import torch
 from transformers.models.qwen3.modeling_qwen3 import *
 from specforge_het.specforge_lm import SpecForgeLM
@@ -6,7 +5,6 @@ from specforge_het.specforge_lm import SpecForgeLM
 
 class Qwen3Drafter(Qwen3Model):
     def __init__(self, draft_config, base_model):
-        draft_config = copy.deepcopy(draft_config)
         draft_config.num_hidden_layers = base_model.config.draft_layers
         draft_config.hidden_size = base_model.get_hidden_size()
         super().__init__(draft_config)

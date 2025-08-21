@@ -23,3 +23,7 @@ def dp_breakpoint():
 def barrier():
     if torch.distributed.is_initialized():
         torch.distributed.barrier()
+
+
+def get_num_parameters(module):
+    return sum(p.numel() for p in module.parameters())

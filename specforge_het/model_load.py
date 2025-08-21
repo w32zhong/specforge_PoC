@@ -1,5 +1,4 @@
-import os
-import json
+import os, json, copy
 from collections import defaultdict
 import torch
 import transformers
@@ -9,9 +8,10 @@ from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 from colorama import Fore, Style
 
 from specforge_het.models import *
+from specforge_het.utils import master_print, get_num_parameters
 
-print(transformers.__path__)
-print(transformers.__version__)
+master_print(transformers.__path__)
+master_print(transformers.__version__)
 
 
 def freeze_model(model):
@@ -44,7 +44,19 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         # (uninitialized) draft model
         draft_class_name, draft_config_path = configs.init_draft_config
         draft_config = AutoConfig.from_pretrained(draft_config_path)
+        draft_config = copy.deepcopy(draft_config)
+        base = model.config # for eval short hands
+        for key, val in configs.draft_config_modify.items():
+            val = eval(val)
+            old_val = getattr(draft_config, key)
+            if old_val != val:
+                setattr(draft_config, key, val)
+                master_print(f'drafter config[{key}]: {old_val} -> {val}')
         draft_model = eval(draft_class_name)(draft_config, model)
+
+        #MLP = draft_model.layers[0].mlp
+        #MoEs = model.model.layers[0].mlp.experts[:model.config.num_experts_per_tok]
+        #assert get_num_parameters(MLP) == get_num_parameters(MoEs)
 
         # attach draft model for the specified algorithm
         model.set_draft_model(draft_model)
@@ -75,8 +87,8 @@ def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
         {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
         {"role": "user", "content": "I'd like to show off how chat templating works!"}
     ]
-    output_test_prompt = tokenizer.apply_chat_template(test_messages, tokenize=False)
-    print('[test chat template]', Fore.YELLOW, '\n' + output_test_prompt, Style.RESET_ALL)
+    test_prompt = tokenizer.apply_chat_template(test_messages, tokenize=False)
+    master_print('[chat template]', Fore.YELLOW, '\n' + test_prompt, Style.RESET_ALL)
 
     if use_deepspeed:
         device_map = None # the model will only contain "meta weights" if use_deepspeed
