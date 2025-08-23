@@ -105,8 +105,7 @@ class EagleV2:
 
     def speculative_generate(self, input_ids, attention_mask, **kwargs):
         inputs_embeds = self.get_token_embedding(input_ids)
-        with torch.no_grad():
-            encoder_hidden_states, base_kv, draft_kv = self.prefill(inputs_embeds, attention_mask)
+        encoder_hidden_states, base_kv, draft_kv = self.prefill(inputs_embeds, attention_mask)
 
         tokens = self.sample_tokens(encoder_hidden_states[:, -1:, :])
         next_root = tokens[0, 0].item()
@@ -217,9 +216,8 @@ class EagleV2:
                 sin[:, index, :]
             )
 
-            hidden_states = inputs_embeds
+            hidden_states = inputs_embeds.to(device)
             for decoder_layer in self.draft_model.layers:
-                breakpoint()
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -228,13 +226,9 @@ class EagleV2:
                     past_key_value=draft_kv,
                 )
             hidden_states = self.draft_model.norm(hidden_states)
-            breakpoint()
-
-            hidden_states = decoder_outputs[0]
-            encoder_hidden_states = torch.cat((encoder_hidden_states, hidden_states), dim=-2)
 
             logits = self.get_token_logits(hidden_states)
-            logprobs = logsoftmax(logits)
+            logprobs = logsoftmax(logits).to(device)
             top = torch.topk(logprobs, top_k, dim=-1)
             top_tokens, top_logprobs = top.indices, top.values
 
