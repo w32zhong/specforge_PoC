@@ -59,7 +59,6 @@ class EagleV2:
         )
 
         decoder_outputs = self.draft_model(
-            input_ids=None,
             inputs_embeds=inputs_embeds_concate,
             **kwargs,
         )
@@ -191,11 +190,10 @@ class EagleV2:
                     zero_posi=zero_posi, logsoftmax=logsoftmax, attn_eye=attn_eye,
                     path_top_idx=path_top_idx, tree_token_Q=tree_token_Q)
 
-    def dynamic_draft(self, next_root, draft_kv, position_embeddings,
-        past_seq_len, encoder_hidden_states, *,
+    def dynamic_draft(self, next_root, draft_kv,
+        position_embeddings, past_seq_len, encoder_hidden_states, *,
         top_k=None, all_top_k=None, max_depth=None, zero_posi=None,
         logsoftmax=None, attn_eye=None, path_top_idx=None, tree_token_Q=None):
-        breakpoint()
 
         device = self.draft_model.device
         tree_size = all_top_k + 1
@@ -204,46 +202,38 @@ class EagleV2:
         logprobs_Q = [torch.zeros((1,), device=device)]
         tree_mask = torch.zeros((1, past_seq_len + 1),
             device=device, dtype=encoder_hidden_states.dtype)
+        attention_mask = tree_mask[None, None]
 
         draft_Q, parent_Q, score_Q = [], [], []
         draft_tokens = torch.tensor([[next_root]], device=device)
 
         for depth in range(max_depth):
+            inputs_embeds = self.get_token_embedding(draft_tokens)
+            n_draft_tokens = inputs_embeds.shape[1]
 
-            hidden_states = self.base_model_inp_embedding(draft_tokens)
-            n_draft_tokens = hidden_states.shape[1]
-            q_index = (past_seq_len + depth) + zero_posi[:n_draft_tokens]
-            q_position_embeddings = (
-                cos[:, q_index, :],
-                sin[:, q_index, :]
-            )
-            k_position_emeddings = (
-                cos[:, :encoder_hidden_states.shape[-2], :],
-                sin[:, :encoder_hidden_states.shape[-2], :]
+            index = (past_seq_len + depth) + zero_posi[:n_draft_tokens]
+            position_embeddings = (
+                cos[:, index, :],
+                sin[:, index, :]
             )
 
-            decoder_hidden_states = hidden_states.to(device)
-            decoder_outputs = self.speculative_decoder(
-                # inputs:
-                decoder_hidden_states,
-                position_embeddings=q_position_embeddings,
-                attention_mask=tree_mask[None, None],
-                # kv cache (only grow in self-attention):
-                use_cache=True, past_key_value=draft_kv,
-                # for cross-attention only:
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_position_embeddings=k_position_emeddings
-            )
+            hidden_states = inputs_embeds
+            for decoder_layer in self.draft_model.layers:
+                breakpoint()
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_embeddings=position_embeddings,
+                    use_cache=True,
+                    past_key_value=draft_kv,
+                )
+            hidden_states = self.draft_model.norm(hidden_states)
+            breakpoint()
+
             hidden_states = decoder_outputs[0]
+            encoder_hidden_states = torch.cat((encoder_hidden_states, hidden_states), dim=-2)
 
-            if not self.config.beagle_strictly_follow_eagle_decoder:
-                hidden_states = self.base_model_norm(hidden_states)
-
-            if (self.inference_configs.draft_growing and
-                depth < self.inference_configs.max_draft_growing_depth):
-                encoder_hidden_states = torch.cat((encoder_hidden_states, hidden_states), dim=-2)
-
-            logits = self.base_model_lm_head(hidden_states)
+            logits = self.get_token_logits(hidden_states)
             logprobs = logsoftmax(logits)
             top = torch.topk(logprobs, top_k, dim=-1)
             top_tokens, top_logprobs = top.indices, top.values
@@ -271,6 +261,7 @@ class EagleV2:
             parent_idx = path_top_idx // top_k
             tree_mask = torch.cat((tree_mask[parent_idx], attn_eye), dim=-1)
 
+        breakpoint()
 
         cat_parent = torch.cat(parent_Q, dim=0)[top_k-1:].tolist() # [1 + (depth-1) x10]
         cat_tokens = torch.cat(draft_Q, dim=0).view(-1) # [10 + (depth-1) x100]
