@@ -1,4 +1,5 @@
 import torch
+from transformers.cache_utils import DynamicCache
 
 
 class EagleV2:
@@ -12,6 +13,8 @@ class EagleV2:
             last_device = next(self.get_base_layers()[-1].parameters()).device
         else:
             last_device = self.device
+
+        self.draft_model.to(last_device)
 
         hidden_size = self.get_hidden_size()
         self.draft_model.eagle_fc = torch.nn.Linear(
@@ -40,11 +43,11 @@ class EagleV2:
             inputs_embeds = self.get_token_embedding(input_ids)
         device, dtype = inputs_embeds.device, inputs_embeds.dtype
 
-        prev_encoder_hidden_states = encoder_outputs.to(device=device, dtype=dtype)
-        next_encoder_hidden_states = target_hiddens.to(device=device, dtype=dtype)
+        prev_states = encoder_outputs.to(device=device, dtype=dtype)
+        next_states = target_hiddens.to(device=device, dtype=dtype)
 
         inputs_embeds_concate = self.draft_model.eagle_fc(
-            torch.cat((inputs_embeds, prev_encoder_hidden_states), dim=-1)
+            torch.cat((inputs_embeds, prev_states), dim=-1)
         )
 
         decoder_outputs = self.draft_model(
@@ -55,7 +58,7 @@ class EagleV2:
         predict = decoder_outputs[0]
 
         with torch.no_grad():
-            target_logits = self.get_token_logits(next_encoder_hidden_states)
+            target_logits = self.get_token_logits(next_states)
             target_p = torch.nn.Softmax(dim=2)(target_logits)
 
         labels = kwargs['labels']
@@ -74,7 +77,7 @@ class EagleV2:
         #ploss.backward()
         #assert not test_nan_grad(self)
 
-        vloss = self.smooth_l1(predict, next_encoder_hidden_states)
+        vloss = self.smooth_l1(predict, next_states)
         vloss = torch.sum(torch.mean(loss_mask * vloss, 2)) / (num_items_in_batch + 1e-5)
 
         #loss = ploss + 10 * vloss # align with LM losses instead of (0.1 * ploss + vloss)
@@ -85,4 +88,47 @@ class EagleV2:
             dict(loss=loss, ploss=ploss, vloss=vloss, _num_items_in_batch=num_items_in_batch)
         )
 
+    @staticmethod
+    def position_embeddings_slice(position_embeddings, slice):
+        return position_embeddings[0][:, slice, :], position_embeddings[1][:, slice, :]
+
     def speculative_generate(self, input_ids, attention_mask, **kwargs):
+        inputs_embeds = self.get_token_embedding(input_ids)
+        with torch.no_grad():
+            encoder_hidden_states, base_kv, draft_kv = self.prefill(inputs_embeds, attention_mask)
+
+        length = input_ids.shape[-1]
+        max_length = min(self.get_max_ctx_length(), self.inference_configs.max_length)
+        cache_position = torch.arange(0, max_length, device=inputs_embeds.device)
+        position_ids = cache_position.unsqueeze(0)
+        position_embeddings = self.get_positional_embedding(inputs_embeds, position_ids)
+
+
+    def prefill(self, inputs_embeds, attention_mask):
+        base_kv = DynamicCache()
+        base_outputs = self.base_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            use_cache=True,
+            past_key_values=base_kv,
+            output_hidden_states=True,
+            return_dict=True
+        )
+        encoder_hidden_states = base_outputs.last_hidden_state
+        prev_states = encoder_hidden_states[:, :-1, :].to(self.draft_model.device)
+        inputs_embeds = inputs_embeds[:, 1:, :].to(self.draft_model.device)
+        attention_mask = attention_mask[:, 1:]
+
+        inputs_embeds_concate = self.draft_model.eagle_fc(
+            torch.cat((inputs_embeds, prev_states), dim=-1)
+        )
+
+        draft_kv = DynamicCache()
+        _ = self.draft_model(
+            inputs_embeds=inputs_embeds_concate,
+            attention_mask=attention_mask,
+            use_cache=True,
+            past_key_values=draft_kv
+        )
+
+        return encoder_hidden_states, base_kv, draft_kv
