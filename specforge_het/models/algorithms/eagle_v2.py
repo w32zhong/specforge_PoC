@@ -84,3 +84,5 @@ class EagleV2:
             dict(loss=loss, decoder_outputs=decoder_outputs, attention_mask=kwargs['attention_mask']),
             dict(loss=loss, ploss=ploss, vloss=vloss, _num_items_in_batch=num_items_in_batch)
         )
+
+    def speculative_generate(self, input_ids, attention_mask, **kwargs):
