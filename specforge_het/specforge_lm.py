@@ -71,7 +71,7 @@ class SpecForgeLM():
         DrafterClass = eval('specforge_het.models.'
             + model.config.speculative_decoding_draft_model)
         draft_config = AutoConfig.from_pretrained(f'{path}/draft_model', trust_remote_code=True)
-        draft_model = DrafterClass(draft_config, model.config)
+        draft_model = DrafterClass(draft_config, model)
         model.set_draft_model(draft_model)
 
         draft_state_dict = torch.load('./output/temp_save/draft_model/states.pt', map_location='cpu')
