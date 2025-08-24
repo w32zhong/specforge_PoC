@@ -36,6 +36,10 @@ class EagleV2:
         return data
 
     def speculative_forward(self, input_ids, encoder_outputs, target_hiddens, **kwargs):
+        assert encoder_outputs.shape[-1] == self.get_hidden_size(), (
+            "input and pre-generated hidden space mismatch! Wrong training dataset?"
+        )
+
         with torch.no_grad():
             inputs_embeds = self.get_token_embedding(input_ids)
         device, dtype = inputs_embeds.device, inputs_embeds.dtype
