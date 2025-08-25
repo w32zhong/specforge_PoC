@@ -107,10 +107,9 @@ class EagleV2:
         inputs_embeds = self.get_token_embedding(input_ids)
         encoder_hidden_states, base_kv, draft_kv = self.prefill(inputs_embeds, attention_mask)
 
-        tokens = self.sample_tokens(encoder_hidden_states[:, -1:, :])
-        next_root = tokens[0, 0].item()
-        print(self.tokenizer.batch_decode(input_ids)[0], end='', flush=True)
-        print(self.tokenizer.batch_decode(tokens)[0], end='', flush=True)
+        next_root = self.sample_tokens(encoder_hidden_states[:, -1:, :])
+        print(self.tokenizer.decode(input_ids[0]), end='', flush=True)
+        print(self.tokenizer.decode(next_root[0]), end='', flush=True)
 
         length = input_ids.shape[-1]
         max_length = min(self.get_max_ctx_length(), self.inference_configs.max_length)
@@ -122,7 +121,7 @@ class EagleV2:
 
         verified_tokens = input_ids[0].tolist()
         n_old_tokens = len(verified_tokens)
-        verified_tokens.append(next_root)
+        verified_tokens.append(next_root.item())
 
         while True:
             past_seq_len = base_kv.get_seq_length()
@@ -130,7 +129,9 @@ class EagleV2:
                 next_root, draft_kv, position_embeddings,
                 past_seq_len, encoder_hidden_states, **draft_indices
             )
-            #tree_Q, leaf_root_paths, tree_attention, tree_positions = res
+            tree_Q, leaf_root_paths, tree_attention, tree_positions = res
+            quit()
+
             #expand_tree_attn = F.pad(
             #    tree_attention.to(device=self.device, dtype=self.dtype),
             #    (past_seq_len, 0), value=1
@@ -200,15 +201,21 @@ class EagleV2:
 
         logprobs_Q = [torch.zeros((1,), device=device)]
         tree_mask = torch.zeros((1, past_seq_len + 1),
-            device=device, dtype=encoder_hidden_states.dtype)
+            device=device, dtype=self.model.dtype)
         attention_mask = tree_mask[None, None]
 
+        prev_states = encoder_hidden_states[:, -1:]
+
         draft_Q, parent_Q, score_Q = [], [], []
-        draft_tokens = torch.tensor([[next_root]], device=device)
+        draft_tokens = next_root
 
         for depth in range(max_depth):
-            inputs_embeds = self.get_token_embedding(draft_tokens)
+            inputs_embeds = self.get_token_embedding(draft_tokens).to(device)
             n_draft_tokens = inputs_embeds.shape[1]
+
+            hidden_states = self.draft_model.eagle_fc(
+                torch.cat((inputs_embeds, prev_states), dim=-1)
+            )
 
             index = (past_seq_len + depth) + zero_posi[:n_draft_tokens]
             position_embeddings = (
@@ -216,7 +223,6 @@ class EagleV2:
                 sin[:, index, :]
             )
 
-            hidden_states = inputs_embeds.to(device)
             for decoder_layer in self.draft_model.layers:
                 hidden_states = decoder_layer(
                     hidden_states,
@@ -231,6 +237,7 @@ class EagleV2:
             logprobs = logsoftmax(logits).to(device)
             top = torch.topk(logprobs, top_k, dim=-1)
             top_tokens, top_logprobs = top.indices, top.values
+            #print([self.tokenizer.decode(t) for t in top_tokens.squeeze()])
 
             # (1, )  <= initial state
             # (10,)  <= topk ==  (1, 10)    +  (1, 1)
