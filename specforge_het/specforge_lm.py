@@ -27,7 +27,8 @@ class SpecForgeLM():
     @classmethod
     def from_pretrained(cls, path, **kwargs):
         kwargs.pop('config')
-        return cls.load_speculative_model(path, **kwargs)
+        model = cls.load_speculative_model(path, **kwargs)
+        return model
 
     @classmethod
     def from_basemodel(cls, base_config, base_model_path=None,
@@ -67,14 +68,15 @@ class SpecForgeLM():
     def load_speculative_model(cls, path, **kwargs):
         config = AutoConfig.from_pretrained(path)
         model = cls.from_basemodel(config, **kwargs)
+
         import specforge_het.models
         DrafterClass = eval('specforge_het.models.'
             + model.config.speculative_decoding_draft_model)
         draft_config = AutoConfig.from_pretrained(f'{path}/draft_model', trust_remote_code=True)
-        draft_model = DrafterClass(draft_config, model.config)
+        draft_model = DrafterClass(draft_config, model)
         model.set_draft_model(draft_model)
-
-        draft_state_dict = torch.load('./output/temp_save/draft_model/states.pt', map_location='cpu')
+        draft_state_dict = torch.load(f'{path}/draft_model/states.pt',
+                                      map_location=model.draft_model.device)
         draft_model.load_state_dict(draft_state_dict, strict=True)
         return model
 

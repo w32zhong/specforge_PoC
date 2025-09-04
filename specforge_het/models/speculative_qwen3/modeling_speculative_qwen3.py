@@ -38,8 +38,14 @@ class SpeculativeQwen3ForCausalLM(SpecForgeLM, Qwen3ForCausalLM):
     def get_token_embedding(self, input_ids):
         return self.base_model.embed_tokens(input_ids)
 
+    def get_positional_embedding(self, t, position_ids):
+        return self.base_model.rotary_emb(t, position_ids)
+
     def get_token_logits(self, hidden_states):
         return self.lm_head(hidden_states)
+
+    def get_max_ctx_length(self):
+        return self.model.config.max_position_embeddings
 
     def save_pretrained(self, path, **kwargs):
         return self.save_speculative_model(path, **kwargs)

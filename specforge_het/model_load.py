@@ -31,6 +31,8 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         base_class_name, base_model_path = configs.init_base_model
         base_config = AutoConfig.from_pretrained(base_model_path)
         if configs.free_base_layers:
+            n_base_layers = getattr(base_config, configs.free_base_layers)
+            setattr(base_config, configs.free_base_layers + '_free', n_base_layers)
             setattr(base_config, configs.free_base_layers, 0)
         algo_class_name, algo_kwargs = configs.init_speculative_algorithm
         model = eval(base_class_name).from_basemodel(
