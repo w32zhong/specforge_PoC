@@ -1,11 +1,12 @@
-import os, json, copy
+import os, json, copy, re
 from collections import defaultdict
+from colorama import Fore, Style
+
 import torch
 import transformers
 import safetensors
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
-from colorama import Fore, Style
 
 from specforge_het.models import *
 from specforge_het.utils import master_print, get_num_parameters
@@ -19,8 +20,52 @@ def freeze_model(model):
         param.requires_grad = False
 
 
+def get_state_dict(model_path):
+    for get_local_path_fn in [os.path.join, hf_hub_download]:
+        for fname in [
+            'model.safetensors',
+            'model.safetensors.index.json',
+            'pytorch_model.bin',
+            'states.pt' # our naming convention for the draft model
+        ]:
+            try:
+                local_path = get_local_path_fn(model_path, fname)
+                assert os.path.exists(local_path)
+
+                if local_path.endswith('model.safetensors.index.json'):
+                    with open(local_path, "r") as fh:
+                        index = json.load(fh)
+                    sharps = index["weight_map"]
+                    dir = os.path.dirname(local_path)
+                    state_dicts = [
+                        safetensors.torch.load_file(
+                            os.path.join(dir, filename)
+                        )
+                        for filename in set(shards.values())
+                    ]
+                elif local_path.endswith('model.safetensors'):
+                    state_dicts = [
+                        safetensors.torch.load_file(local_path)
+                    ]
+                else:
+                    state_dicts = [
+                        torch.load(local_path)
+                    ]
+
+                state_dict = dict()
+                for partial_state_dict in state_dicts:
+                    state_dict.update(partial_state_dict)
+                return state_dict
+
+            except Exception:
+                continue
+    return None
+
+
 def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs):
     try:
+        if configs.stand_alone_draft_model_path:
+            raise Exception('go to except')
         model = AutoModelForCausalLM.from_pretrained(configs.model_path,
             trust_remote_code=True, **kwargs)
         if freeze_base_model:
@@ -55,13 +100,29 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
                 setattr(draft_config, key, val)
                 master_print(f'drafter config[{key}]: {old_val} -> {val}')
         draft_model = eval(draft_class_name)(draft_config, model)
-
         #MLP = draft_model.layers[0].mlp
         #MoEs = model.model.layers[0].mlp.experts[:model.config.num_experts_per_tok]
         #assert get_num_parameters(MLP) == get_num_parameters(MoEs)
 
         # attach draft model for the specified algorithm
         model.set_draft_model(draft_model)
+
+        if configs.stand_alone_draft_model_path:
+            draft_state_dict = get_state_dict(configs.stand_alone_draft_model_path)
+            key_adapt = configs.stand_alone_draft_model_key_adapt
+            key_modify = configs.stand_alone_draft_model_key_modify
+            for key in list(draft_state_dict.keys()):
+                for pattern, repl in key_modify[key_adapt]:
+                    if not re.match(pattern, key):
+                        continue
+                    if repl is None:
+                        del draft_state_dict[key]
+                    else:
+                        new_key = re.sub(pattern, repl, key)
+                        draft_state_dict[new_key] = draft_state_dict.pop(key)
+            master_print('draft model:', model.draft_model)
+            master_print('stand-alone loading keys:', draft_state_dict.keys())
+            model.draft_model.load_state_dict(draft_state_dict, strict=True)
 
     return model
 
