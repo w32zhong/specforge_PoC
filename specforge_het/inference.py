@@ -34,14 +34,17 @@ def main(config_file='configs.ini', **injects):
         accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
         total_accept_tokens += len(accept_tokens)
         print(tokenizer.decode(accept_tokens), end=' ', flush=True)
+        #print(accept_tokens)
         if eos_pos.numel() > 0:
             break
         accept_length.append(len(accept_tokens))
         cnt += 1
     print('\n')
+    accept_length.pop(0) # exclude pre-fill
 
     seconds = time.perf_counter() - start_time
 
+    print(accept_length)
     print('num output tokens:', total_accept_tokens, f'in {seconds} sec')
     print('tokens per second:', round(total_accept_tokens / seconds, 3))
     print('max accept_length:', max(accept_length))
