@@ -133,8 +133,9 @@ class EagleV2:
             output_hidden_states=True,
             return_dict=True
         )
-        encoder_hidden_states = base_outputs.last_hidden_state
-        last_states = encoder_hidden_states[:, :-1, :].to(self.draft_model.device)
+        base_hidden_states = base_outputs.last_hidden_state
+
+        last_states = base_hidden_states[:, :-1, :].to(self.draft_model.device)
         inputs_embeds = inputs_embeds[:, 1:, :].to(self.draft_model.device)
         attention_mask = attention_mask[:, 1:]
 
@@ -150,7 +151,7 @@ class EagleV2:
             past_key_values=draft_kv
         )
 
-        return encoder_hidden_states, base_kv, draft_kv
+        return base_hidden_states, base_kv, draft_kv
 
     def prebuilt_position_embeddings(self, inputs_embeds):
         max_length = min(self.get_max_ctx_length(), self.inference_configs.max_length)
