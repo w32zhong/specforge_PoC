@@ -83,7 +83,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         model = eval(base_class_name).from_basemodel(
             base_config, base_model_path,
             AlgoClass=eval(algo_class_name), algo_kwargs=eval(algo_kwargs),
-            _fast_init=False, **kwargs
+            **kwargs
         )
         if freeze_base_model:
             freeze_model(model)
@@ -99,7 +99,9 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             if old_val != val:
                 setattr(draft_config, key, val)
                 master_print(f'drafter config[{key}]: {old_val} -> {val}')
+
         draft_model = eval(draft_class_name)(draft_config, model)
+        draft_model.to(model.dtype)
         #MLP = draft_model.layers[0].mlp
         #MoEs = model.model.layers[0].mlp.experts[:model.config.num_experts_per_tok]
         #assert get_num_parameters(MLP) == get_num_parameters(MoEs)
