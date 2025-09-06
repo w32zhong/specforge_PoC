@@ -443,7 +443,6 @@ class EagleV2:
 
         leaf_root_paths = self.extract_leaf_root_paths(row_map, max_depth,
                                                       tree_mask, tree_positions)
-        leaf_root_paths = leaf_root_paths.to(self.base_model.device)
 
         return dict(
             draft_token_buff=draft_token_buff, tree_mask=tree_mask,
@@ -478,6 +477,9 @@ class EagleV2:
 
         logits = self.get_token_logits(hidden_states)
         next_tokens = logits.argmax(dim=-1)
+
+        next_tokens = next_tokens.to(self.base_model.device)
+        leaf_root_paths = leaf_root_paths.to(self.base_model.device)
 
         draft_paths = draft_token_buff[idx_B, leaf_root_paths][..., 1:]
         truth_paths = next_tokens[idx_B, leaf_root_paths]

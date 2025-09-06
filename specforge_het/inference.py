@@ -4,7 +4,10 @@ from specforge_het.model_load import load_models
 
 def main(config_file='configs.ini', **injects):
     configs = Configs.from_config_file(config_file, **injects)
+
+    configs.set_obj('modeling.free_base_layers', None)
     tokenizer, model = load_models(configs.modeling)
+
     model.eval()
     model.tokenizer = tokenizer
     model.inference_configs = configs.inference
