@@ -144,12 +144,13 @@ class EagleV2:
         )
 
         draft_kv = DynamicCache()
-        _ = self.draft_model(
+        draft_outputs = self.draft_model(
             inputs_embeds=inputs_embeds_concate,
             attention_mask=attention_mask,
             use_cache=True,
             past_key_values=draft_kv
         )
+        #print(draft_outputs[0].sum(-1))
 
         return base_hidden_states, base_kv, draft_kv
 
@@ -177,9 +178,12 @@ class EagleV2:
         # t1 t2 t3 t4|t5 ~~~~~~~~|t5 t6 t7|t8
         draft_indices = self.dynamic_draft_indices(input_ids.shape[0])
         while True:
+            # past_seq_len is derived from base_kv because
+            # base_kv length is more stable.
             past_seq_len = base_kv.get_seq_length()
+
             draft_outputs = self.dynamic_draft(
-                draft_kv, position_embeddings, past_seq_len,
+                draft_kv, position_embeddings, past_seq_len - 1,
                 next_root, last_states, **draft_indices
             )
             verified_path, verified_idx, hidden_states = self.verify(
