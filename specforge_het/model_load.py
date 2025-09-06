@@ -136,7 +136,7 @@ def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
     chat_template_path = os.path.join('specforge_het', configs.chat_template)
     with open(chat_template_path, 'r') as fh:
         lines = fh.readlines()
-    cleaned_template = "".join(line.lstrip() for line in lines)
+    cleaned_template = "".join(line.strip() for line in lines)
     tokenizer.chat_template = cleaned_template
 
     for token_key, token in eval(configs.tokenizer_add_tokens).items():
