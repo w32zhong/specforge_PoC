@@ -34,3 +34,18 @@ CUDA_VISIBLE_DEVICES=0 python -m specforge_het.train \
 If you choose to use EAGLE-format offline-training data, replace `--dataset.path <path>` to `--dataset.read_eagle_format --dataset.path <path/to/sharegpt_0_67999_mufp16>`
 
 To add evaluation data: `--dataset.eval_path <path>`.
+
+## Inference
+```sh
+CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
+    --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
+    --modeling.model_path /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66
+```
+
+To use a stand-alone draft checkpoint:
+```sh
+CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
+    --@llama2_7b_base_and_llama2_7b_drafter_using_eagle2 \
+    --modeling.stand_alone_draft_model_path yuhuili/EAGLE-llama2-chat-7B \
+    --modeling.stand_alone_draft_model_key_adapt yuhuili
+```
