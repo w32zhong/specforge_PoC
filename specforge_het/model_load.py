@@ -68,8 +68,6 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             raise Exception('go to except')
         model = AutoModelForCausalLM.from_pretrained(configs.model_path,
             trust_remote_code=True, **kwargs)
-        if freeze_base_model:
-            freeze_model(model)
 
     except Exception as e:
         # base model
@@ -85,8 +83,6 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             AlgoClass=eval(algo_class_name), algo_kwargs=eval(algo_kwargs),
             **kwargs
         )
-        if freeze_base_model:
-            freeze_model(model)
 
         # (uninitialized) draft model
         draft_class_name, draft_config_path = configs.init_draft_config
@@ -126,6 +122,8 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             master_print('stand-alone loading keys:', draft_state_dict.keys())
             model.draft_model.load_state_dict(draft_state_dict, strict=True)
 
+    if freeze_base_model and hasattr(model, 'base_model'):
+        freeze_model(model.base_model)
     return model
 
 
