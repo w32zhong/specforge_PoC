@@ -75,11 +75,11 @@ class EagleV2:
             inputs_embeds = self.get_token_embedding(input_ids)
         device, dtype = inputs_embeds.device, inputs_embeds.dtype
 
-        last_states = encoder_outputs.to(device=device, dtype=dtype)
+        prev_states = encoder_outputs.to(device=device, dtype=dtype)
         next_states = target_hiddens.to(device=device, dtype=dtype)
 
         inputs_embeds_concate = self.draft_model.eagle_fc(
-            torch.cat((inputs_embeds, last_states), dim=-1)
+            torch.cat((inputs_embeds, prev_states), dim=-1)
         )
 
         decoder_outputs = self.draft_model(
@@ -123,7 +123,7 @@ class EagleV2:
     ## Inference ##
     ###############
 
-    def prefill(self, inputs_embeds, attention_mask):
+    def prefill_base_model(self, inputs_embeds, attention_mask):
         base_kv = DynamicCache()
         base_outputs = self.base_model(
             inputs_embeds=inputs_embeds,
@@ -133,26 +133,25 @@ class EagleV2:
             output_hidden_states=True,
             return_dict=True
         )
-        base_hidden_states = base_outputs.last_hidden_state
+        return base_outputs.last_hidden_state, base_kv
 
-        last_states = base_hidden_states[:, :-1, :].to(self.draft_model.device)
-        inputs_embeds = inputs_embeds[:, 1:, :].to(self.draft_model.device)
-        attention_mask = attention_mask[:, 1:]
+    def prefill_draft_model(self, inputs_embeds, prev_states, *,
+                            attention_mask=None, draft_kv=None):
+        prev_states = prev_states.to(self.draft_model.device)
+        inputs_embeds = inputs_embeds.to(self.draft_model.device)
 
         inputs_embeds_concate = self.draft_model.eagle_fc(
-            torch.cat((inputs_embeds, last_states), dim=-1)
+            torch.cat((inputs_embeds, prev_states), dim=-1)
         )
 
-        draft_kv = DynamicCache()
-        draft_outputs = self.draft_model(
+        draft_kv = DynamicCache() if draft_kv is None else draft_kv
+        _ = self.draft_model(
             inputs_embeds=inputs_embeds_concate,
             attention_mask=attention_mask,
             use_cache=True,
             past_key_values=draft_kv
         )
-        #print(draft_outputs[0].sum(-1))
-
-        return base_hidden_states, base_kv, draft_kv
+        return draft_kv
 
     def prebuilt_position_embeddings(self, inputs_embeds):
         max_length = min(self.get_max_ctx_length(), self.inference_configs.max_length)
@@ -165,8 +164,12 @@ class EagleV2:
         position_embeddings = self.prebuilt_position_embeddings(inputs_embeds)
         max_length = position_embeddings[0].shape[1]
 
-        hidden_states, base_kv, draft_kv = self.prefill(inputs_embeds, attention_mask)
-        last_states = hidden_states[:, -1:] # [B, 1, H]
+        hidden_states, base_kv = self.prefill_base_model(inputs_embeds, attention_mask)
+        prev_states, last_states = hidden_states[:, :-1], hidden_states[:, -1:]
+
+        draft_kv = self.prefill_draft_model(inputs_embeds[:, 1:], prev_states,
+                                            attention_mask=attention_mask[:, 1:])
+
 
         logits = self.get_token_logits(last_states)
         next_root = logits.argmax(dim=-1)
@@ -186,21 +189,27 @@ class EagleV2:
                 draft_kv, position_embeddings, past_seq_len - 1,
                 next_root, last_states, **draft_indices
             )
-            verified_path, verified_idx, hidden_states = self.verify(
+            accept_tokens, accept_idx, hidden_states = self.verify(
                 base_kv, position_embeddings, past_seq_len,
                 **draft_outputs
             )
 
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
-            self.reset_kv_cache(base_kv, draft_kv, past_seq_len, verified_idx)
+            self.reset_kv_cache(base_kv, draft_kv, past_seq_len, accept_idx)
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
 
-            yield verified_path
+            yield accept_tokens
 
-            # TODO: last id per batch is not necessarily the last.
-            next_root = verified_path[:, -1:]
-            last_idx = verified_idx[:, -1]
-            last_states = hidden_states[:, last_idx.to(hidden_states.device)]
+            # TODO: last states per batch is not necessarily the last element.
+            if accept_tokens.shape[-1] > 1:
+                prev_states, last_states = hidden_states[:, :-1], hidden_states[:, -1:]
+                prefill_tokens, next_root = accept_tokens[:, :-1], accept_tokens[:, -1:]
+                inputs_embeds = self.get_token_embedding(prefill_tokens)
+                draft_kv = self.prefill_draft_model(inputs_embeds, prev_states,
+                                                    draft_kv=draft_kv)
+            else:
+                last_states = hidden_states
+                next_root = accept_tokens
 
     def topk_tokens(self, hiddens, top_k, debug=False):
         logits = self.get_token_logits(hiddens)
@@ -495,10 +504,10 @@ class EagleV2:
         idx_B, match_length, match_idx, bonus = (
             idx_B.squeeze(-1), match_length.squeeze(-1), match_idx.squeeze(-1), 1
         ) # shape: [B]
-        # [B, L, 1 + max_depth]
-        verified_path = truth_paths[idx_B, match_idx, :match_length + bonus]
-        verified_idx = leaf_root_paths[idx_B, match_idx, :match_length + bonus]
-        return verified_path, verified_idx, hidden_states
+        accept_tokens = truth_paths[idx_B, match_idx, :match_length + bonus]
+        accept_idx = leaf_root_paths[idx_B, match_idx, :match_length + bonus]
+        accept_states = hidden_states[idx_B, accept_idx.to(hidden_states.device)]
+        return accept_tokens, accept_idx, accept_states
 
     def reset_kv_cache(self, base_kv, draft_kv, past_seq_len, indices):
         select_indices = past_seq_len + indices
