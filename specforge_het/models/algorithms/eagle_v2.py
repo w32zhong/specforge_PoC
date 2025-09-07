@@ -1,4 +1,4 @@
-import torch
+import torch, random
 from transformers.cache_utils import DynamicCache
 
 
@@ -28,6 +28,43 @@ def shrink_cache(cache, past_seq_len, select_indices=None, debug=False):
         new_cache = cache[..., : past_seq_len, :]
     if debug: print(new_cache[0, 0].sum(-1))
     return new_cache
+
+
+def print_predictions(tokenizer, input_ids, logits, labels, *,
+                      max_rows=100, topk=4):
+    from colorama import Fore, Style
+    cnt_rows, last_i = 0, -1
+    printable = lambda s: repr(s.encode())
+    for i, (input_id, logit, label) in enumerate(zip(input_ids, logits, labels)):
+        if label < 0:
+            label_tok = '<-100>'
+            if last_i == -1:
+                continue ## comment to show all labels
+        else:
+            label_tok = printable(tokenizer.decode(label))
+        topk_preds = torch.topk(logit, k=topk).indices
+        topk_tokens = tokenizer.batch_decode(topk_preds.unsqueeze(-1))
+        input_tok = printable(tokenizer.decode(input_id))
+        if i != last_i + 1: print('...')
+        last_i = i
+        print(f'{input_tok:<16}', end='')
+        for tok in [printable(t) for t in topk_tokens]:
+            color = Fore.GREEN if tok == label_tok else Fore.RED
+            print(f'{color}{tok:<16}', Style.RESET_ALL, end='')
+        print(f'{label_tok:<16}')
+        cnt_rows += 1
+        if cnt_rows >= max_rows:
+            break
+
+
+def prediction_accuracy(logits, labels, *, topk=10):
+    topk_preds = logits.topk(k=topk).indices
+    topk_labels = labels[..., None].expand(*labels.shape, topk)
+    topk_labels = topk_labels.to(topk_preds.device)
+    valid_preds = (labels != -100)[..., None]
+    topk_valid_preds = valid_preds.expand(*labels.shape, topk)
+    corrects = (topk_preds == topk_labels)[topk_valid_preds]
+    return corrects.sum().item(), valid_preds.sum().item()
 
 
 class EagleV2:
@@ -112,6 +149,16 @@ class EagleV2:
 
         ploss = -torch.sum(torch.sum(loss_mask * plogp, 2)) / (num_items_in_batch + 1e-5)
 
+        ## in-batch accuracy evaluation/print
+        base_logits = self.get_token_logits(encoder_outputs)
+        base_labels = base_logits.argmax(dim=-1)
+        base_labels[labels == -100] = -100
+        corrects, total = prediction_accuracy(
+                              pred_logits[:, :-1], base_labels[:, 1:])
+        topk_accuracy = corrects / (total + 1e-5)
+        if random.random() < 0.02:
+            print_predictions(self.tokenizer, input_ids[0, :-1],
+                              pred_logits[0, :-1], base_labels[0, 1:])
         ## DEBUG
         #from specforge_het.debug import test_nan_grad
         #ploss.backward()
@@ -124,7 +171,8 @@ class EagleV2:
 
         return (
             dict(loss=loss, decoder_outputs=decoder_outputs, attention_mask=kwargs['attention_mask']),
-            dict(loss=loss, ploss=ploss, vloss=vloss, _num_items_in_batch=num_items_in_batch)
+            dict(loss=loss, ploss=ploss, vloss=vloss,
+                 _num_items_in_batch=num_items_in_batch, avg_topk_accuracy=topk_accuracy)
         )
 
     ###############
