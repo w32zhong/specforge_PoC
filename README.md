@@ -35,6 +35,8 @@ If you choose to use EAGLE-format offline-training data, replace `--dataset.path
 
 To add evaluation data: `--dataset.eval_path <path>`.
 
+To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
+
 ## Inference
 ```sh
 CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
