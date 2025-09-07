@@ -83,8 +83,6 @@ class EagleV2:
         device, dtype = inputs_embeds.device, inputs_embeds.dtype
 
         prev_states = encoder_outputs.to(device=device, dtype=dtype)
-        next_states = target_hiddens.to(device=device, dtype=dtype)
-
         inputs_embeds_concate = self.draft_model.eagle_fc(
             torch.cat((inputs_embeds, prev_states), dim=-1)
         )
@@ -93,10 +91,11 @@ class EagleV2:
             inputs_embeds=inputs_embeds_concate,
             **kwargs,
         )
-        predict = decoder_outputs[0]
+        predict = decoder_outputs[0].to(target_hiddens.device)
 
         with torch.no_grad():
-            target_logits = self.get_token_logits(next_states)
+            target_logits = self.get_token_logits(target_hiddens)
+            target_logits = target_logits.to(target_hiddens.device)
             target_p = torch.nn.Softmax(dim=2)(target_logits)
 
         labels = kwargs['labels']
@@ -105,9 +104,12 @@ class EagleV2:
         loss_mask = loss_mask[:, :, None]
 
         pred_logits = self.get_token_logits(predict)
+        pred_logits = pred_logits.to(target_hiddens.device)
         pred_logp = torch.nn.LogSoftmax(dim=2)(pred_logits)
         plogp = target_p * pred_logp
+
         num_items_in_batch = kwargs.get('num_items_in_batch', loss_mask.sum())
+
         ploss = -torch.sum(torch.sum(loss_mask * plogp, 2)) / (num_items_in_batch + 1e-5)
 
         ## DEBUG
@@ -115,7 +117,7 @@ class EagleV2:
         #ploss.backward()
         #assert not test_nan_grad(self)
 
-        vloss = self.smooth_l1(predict, next_states)
+        vloss = self.smooth_l1(predict, target_hiddens)
         vloss = torch.sum(torch.mean(loss_mask * vloss, 2)) / (num_items_in_batch + 1e-5)
 
         loss = self.config.ploss_w * ploss + self.config.vloss_w * vloss
