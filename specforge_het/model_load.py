@@ -114,7 +114,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             key_adapt = configs.stand_alone_draft_model_key_adapt
             key_modify = configs.stand_alone_draft_model_key_modify
             for key in list(draft_state_dict.keys()):
-                for pattern, repl in key_modify[key_adapt]:
+                for pattern, repl in key_modify.get(key_adapt, []):
                     if not re.match(pattern, key):
                         continue
                     if repl is None:
