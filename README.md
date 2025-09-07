@@ -50,3 +50,10 @@ CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --modeling.stand_alone_draft_model_path yuhuili/EAGLE-llama2-chat-7B \
     --modeling.stand_alone_draft_model_key_adapt yuhuili
 ```
+
+The inference script can be directly compared to the script from the original EAGLE reference implementation:
+```sh
+cd eagle_v2/eagle
+git checkout v2
+CUDA_VISIBLE_DEVICES=0,1 python application/test.py
+```
