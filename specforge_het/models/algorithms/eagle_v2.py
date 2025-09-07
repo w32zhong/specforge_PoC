@@ -167,13 +167,12 @@ class EagleV2:
         hidden_states, base_kv = self.prefill_base_model(inputs_embeds, attention_mask)
         prev_states, last_states = hidden_states[:, :-1], hidden_states[:, -1:]
 
-        draft_kv = self.prefill_draft_model(inputs_embeds[:, 1:], prev_states,
-                                            attention_mask=attention_mask[:, 1:])
-
-
         logits = self.get_token_logits(last_states)
         next_root = logits.argmax(dim=-1)
         yield next_root
+
+        draft_kv = self.prefill_draft_model(inputs_embeds[:, 1:], prev_states,
+                                            attention_mask=attention_mask[:, 1:])
 
         #  pre-fill  |draft tree | verify |next_root
         # h1 h2 h3 h4|~~~~~~~~~~ |h5 h6 h7|
