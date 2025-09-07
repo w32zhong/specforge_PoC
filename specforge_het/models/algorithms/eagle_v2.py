@@ -477,6 +477,7 @@ class EagleV2:
         hidden_states = self.get_token_embedding(draft_token_buff[..., :-1])
         assert len(self.base_model.layers) == self.config.num_hidden_layers
         for decoder_layer in self.base_model.layers:
+            ext_tree_mask = ext_tree_mask.to(hidden_states.device)
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=finalize_mask(ext_tree_mask).unsqueeze(1),
