@@ -31,10 +31,17 @@ def shrink_cache(cache, past_seq_len, select_indices=None, debug=False):
 
 
 class EagleV2:
-    def __init__(self, draft_layers=1, skip_input_layernorm=True, skip_output_norm=True, **kwargs):
+    def __init__(self, draft_layers=1,
+                 skip_input_layernorm=True,
+                 skip_output_norm=True,
+                 ploss_w=0.1,
+                 vloss_w=1.0,
+                 **kwargs):
         self.config.draft_layers = draft_layers
         self.config.skip_input_layernorm = skip_input_layernorm
         self.config.skip_output_norm = skip_output_norm
+        self.config.ploss_w = ploss_w
+        self.config.vloss_w = vloss_w
 
     def on_draft_model_set(self):
         if len(self.get_base_layers()) > 0:
@@ -111,8 +118,7 @@ class EagleV2:
         vloss = self.smooth_l1(predict, next_states)
         vloss = torch.sum(torch.mean(loss_mask * vloss, 2)) / (num_items_in_batch + 1e-5)
 
-        #loss = ploss + 10 * vloss # align with LM losses instead of (0.1 * ploss + vloss)
-        loss = 0.1 * ploss + vloss
+        loss = self.config.ploss_w * ploss + self.config.vloss_w * vloss
 
         return (
             dict(loss=loss, decoder_outputs=decoder_outputs, attention_mask=kwargs['attention_mask']),
