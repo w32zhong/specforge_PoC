@@ -133,6 +133,7 @@ class EagleV2:
             output_hidden_states=True,
             return_dict=True
         )
+        assert base_kv.get_seq_length() > 0
         return base_outputs.last_hidden_state, base_kv
 
     def prefill_draft_model(self, inputs_embeds, prev_states, *,

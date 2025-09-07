@@ -1,3 +1,4 @@
+import torch
 import time
 from specforge_het.configs import Configs
 from specforge_het.model_load import load_models
@@ -29,16 +30,17 @@ def main(config_file='configs.ini', **injects):
     eos = tokenizer.eos_token_id
     cnt, total_accept_tokens, accept_length = 0.01, 0, []
     print(tokenizer.batch_decode(test_inputs.input_ids), end='\n', flush=True)
-    for tokens in model.speculative_generate(**test_inputs):
-        eos_pos = (tokens == eos).nonzero()
-        accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
-        total_accept_tokens += len(accept_tokens)
-        print(tokenizer.decode(accept_tokens), end=' ', flush=True)
-        #print(accept_tokens)
-        if eos_pos.numel() > 0:
-            break
-        accept_length.append(len(accept_tokens))
-        cnt += 1
+    with torch.no_grad():
+        for tokens in model.speculative_generate(**test_inputs):
+            eos_pos = (tokens == eos).nonzero()
+            accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
+            total_accept_tokens += len(accept_tokens)
+            print(tokenizer.decode(accept_tokens), end=' ', flush=True)
+            #print(accept_tokens)
+            if eos_pos.numel() > 0:
+                break
+            accept_length.append(len(accept_tokens))
+            cnt += 1
     print('\n')
     accept_length.pop(0) # exclude pre-fill
 
