@@ -44,7 +44,7 @@ Useful options:
 ```sh
 CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
-    --modeling.model_path /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
+    --modeling.model_path /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66
 ```
 
 To use a stand-alone draft checkpoint:
