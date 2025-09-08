@@ -80,19 +80,21 @@ class EagleV2:
         self.config.ploss_w = ploss_w
         self.config.vloss_w = vloss_w
 
-    def on_draft_model_set(self):
-        if len(self.get_base_layers()) > 0:
-            last_device = next(self.get_base_layers()[-1].parameters()).device
-        else:
-            last_device = self.device
-
-        self.draft_model.to(last_device)
+    def on_draft_model_set(self, load_device=None):
+        if load_device is None:
+            if len(self.get_base_layers()) > 0:
+                last_device = next(self.get_base_layers()[-1].parameters()).device
+            else:
+                last_device = self.device
+            load_device = last_device
 
         hidden_size = self.get_hidden_size()
         self.draft_model.eagle_fc = torch.nn.Linear(
-            2 * hidden_size, hidden_size, bias=True,
-            device=last_device, dtype=self.base_model.dtype
+            2 * hidden_size, hidden_size, bias=True
         )
+
+        self.draft_model.to(device=load_device, dtype=self.base_model.dtype)
+
         self.smooth_l1 = torch.nn.SmoothL1Loss(reduction="none")
 
     @staticmethod
@@ -523,14 +525,14 @@ class EagleV2:
                draft_token_buff, tree_mask, tree_positions, leaf_root_paths):
         B = draft_token_buff.shape[0]
         idx_B = torch.arange(B).unsqueeze(-1)
+        hidden_states = self.get_token_embedding(draft_token_buff[..., :-1])
 
         ext_tree_mask = torch.nn.functional.pad(
             tree_mask, (past_seq_len, 0), value=1
-        ).float()
+        ).to(dtype=hidden_states.dtype)
 
         ext_tree_positions = past_seq_len + tree_positions
 
-        hidden_states = self.get_token_embedding(draft_token_buff[..., :-1])
         assert len(self.base_model.layers) == self.config.num_hidden_layers
         for decoder_layer in self.base_model.layers:
             ext_tree_mask = ext_tree_mask.to(hidden_states.device)

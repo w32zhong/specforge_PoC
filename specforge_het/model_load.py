@@ -1,4 +1,4 @@
-import os, json, copy, re
+import os, json, copy, re, time
 from collections import defaultdict
 from colorama import Fore, Style
 
@@ -70,6 +70,9 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             trust_remote_code=True, **kwargs)
 
     except Exception as e:
+        master_print(e, "\n" "Fallback to separated base/draft loading...")
+        time.sleep(3)
+
         # base model
         base_class_name, base_model_path = configs.init_base_model
         base_config = AutoConfig.from_pretrained(base_model_path)
@@ -159,7 +162,8 @@ def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
         device_map='auto' if world_size == 1 else f'cuda:{rank}'
 
     model = load_speculative_model_if_possible(configs,
-        attn_implementation="eager", device_map=device_map, torch_dtype=eval(configs.dtype)
+        attn_implementation="eager", device_map=device_map,
+        torch_dtype=eval(configs.dtype), max_memory=configs.max_memory
     )
 
     # ensure no module is on an abstract device

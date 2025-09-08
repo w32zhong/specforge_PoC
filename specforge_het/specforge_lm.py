@@ -19,10 +19,10 @@ class SpecForgeLM():
     def draft_model(self):
         return getattr(self, self.draft_model_path_prefix)
 
-    def set_draft_model(self, model):
+    def set_draft_model(self, model, **kwargs):
         self.config.speculative_decoding_draft_model = model.__class__.__name__
         setattr(self, self.draft_model_path_prefix, model)
-        self.on_draft_model_set()
+        self.on_draft_model_set(**kwargs)
 
     @classmethod
     def from_pretrained(cls, path, **kwargs):
@@ -77,7 +77,7 @@ class SpecForgeLM():
         draft_model = DrafterClass(draft_config, model)
         model.set_draft_model(draft_model)
         draft_state_dict = torch.load(f'{path}/draft_model/states.pt',
-                                      map_location=model.draft_model.device)
+                                      map_location='cpu')
         draft_model.load_state_dict(draft_state_dict, strict=True)
         return model
 
