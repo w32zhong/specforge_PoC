@@ -10,10 +10,10 @@ class Qwen3MoeDrafter(Qwen3MoeModel):
         draft_config.hidden_size = base_model.get_hidden_size()
         super().__init__(draft_config)
 
-        if base_model.config.skip_input_layernorm:
-            for layer in self.layers:
-                delattr(layer, 'input_layernorm')
-                layer.input_layernorm = torch.nn.Identity()
+        if base_model.config.skip_first_input_layernorm:
+            layer = self.layers[0]
+            delattr(layer, 'input_layernorm')
+            layer.input_layernorm = torch.nn.Identity()
 
         if base_model.config.skip_output_norm:
             delattr(self, 'norm')

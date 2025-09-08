@@ -69,13 +69,13 @@ def prediction_accuracy(logits, labels, *, topk=10):
 
 class EagleV2:
     def __init__(self, draft_layers=1,
-                 skip_input_layernorm=True,
+                 skip_first_input_layernorm=True,
                  skip_output_norm=True,
                  ploss_w=0.1,
                  vloss_w=1.0,
                  **kwargs):
         self.config.draft_layers = draft_layers
-        self.config.skip_input_layernorm = skip_input_layernorm
+        self.config.skip_first_input_layernorm = skip_first_input_layernorm
         self.config.skip_output_norm = skip_output_norm
         self.config.ploss_w = ploss_w
         self.config.vloss_w = vloss_w
