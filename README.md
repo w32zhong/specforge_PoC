@@ -31,18 +31,16 @@ CUDA_VISIBLE_DEVICES=0 python -m specforge_het.train \
     # --training.report_to wandb --training.project eagle4
 ```
 
-If you choose to use EAGLE-format offline-training data, replace `--dataset.path <path>` to `--dataset.read_eagle_format --dataset.path <path/to/sharegpt_0_67999_mufp16>`
-
-To add evaluation data: `--dataset.eval_path <path>`.
-
-To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
+Useful options:
+* If you choose to use EAGLE-format offline-training data, replace `--dataset.path <path>` to `--dataset.read_eagle_format --dataset.path <path/to/sharegpt_0_67999_mufp16>`
+* To add evaluation data: `--dataset.eval_path <path>`.
+* To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
 
 ## Inference
 ```sh
 CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
     --modeling.model_path /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
-    --modeling.dtype torch.float
 ```
 
 To use a stand-alone draft checkpoint:
@@ -59,3 +57,6 @@ cd eagle_v2/eagle
 git checkout v2
 CUDA_VISIBLE_DEVICES=0,1 python application/test.py
 ```
+
+Useful options:
+* To specify GPU VRAM allocations: `--modeling.max_memory "{0: '17.5GiB', 1: '17GiB', 2: '13.5GiB', 3: '17GiB'}"`
