@@ -10,7 +10,7 @@ pip install -r specforge_het/requirements.txt
 ```
 
 ## Training Data Generation (Optional)
-Generate dataset (use `--dataset_generation.output_dir` to specify an alternative output directory):
+Generate dataset:
 ```sh
 rm -rf output/datasets/ds_Llama-2-7b-chat-hf*
 CUDA_VISIBLE_DEVICES=0 python -m specforge_het.data_gen gen_dataset --@llama2_7b --ds_range 0,17500
@@ -21,6 +21,10 @@ python -m specforge_het.data_gen merge_datasets \
     output/datasets/ds_Llama-2-7b-chat-hf \
     output/datasets/ds_Llama-2-7b-chat-hf__range*
 ```
+
+Useful options:
+* Use `--dataset_generation.output_dir` to specify an alternative output directory
+* To specify a different source dataset and save prefix, e.g., `--dataset_generation.ds_prefix eval_ds_ --dataset_generation.sharegpt_path w32zhong/qwen3_moe_30A3B_instr_2507_mt-bench` (useful for generating evaluation dataset)
 
 ## Training
 ```sh
