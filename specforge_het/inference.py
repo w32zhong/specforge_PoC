@@ -2,6 +2,7 @@ import torch
 import time
 from specforge_het.configs import Configs
 from specforge_het.model_load import load_models
+from specforge_het.specforge_lm import is_speculative_model
 
 sys_instructions = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
 
@@ -27,31 +28,47 @@ def main(config_file='configs.ini', **injects):
 
     start_time = time.perf_counter()
 
-    eos = tokenizer.eos_token_id
-    cnt, total_accept_tokens, accept_length = 0.01, 0, []
+    total_generated_tokens = 0
     print(tokenizer.batch_decode(test_inputs.input_ids), end='\n', flush=True)
     with torch.no_grad():
-        for tokens in model.speculative_generate(**test_inputs):
-            eos_pos = (tokens == eos).nonzero()
-            accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
-            total_accept_tokens += len(accept_tokens)
-            print(tokenizer.decode(accept_tokens), end=' ', flush=True)
-            #print(accept_tokens)
-            if eos_pos.numel() > 0:
-                break
-            accept_length.append(len(accept_tokens))
-            cnt += 1
-    print('\n')
-    accept_length.pop(0) # exclude pre-fill
+        if is_speculative_model(model):
+            cnt_speculative_iterations = 0
+            eos = tokenizer.eos_token_id
+            accept_length = []
+            for tokens in model.speculative_generate(**test_inputs):
+                eos_pos = (tokens == eos).nonzero()
+                accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
+                total_generated_tokens += len(accept_tokens)
+                print(tokenizer.decode(accept_tokens), end=' ', flush=True)
+                #print(accept_tokens)
+                if eos_pos.numel() > 0:
+                    break
+                accept_length.append(len(accept_tokens))
+                cnt_speculative_iterations += 1
+            print('\n')
+            accept_length.pop(0) # exclude pre-fill
+
+            print(accept_length)
+            print('max accept_length:', max(accept_length))
+            print('min accept_length:', min(accept_length))
+            print('avg accept_length:', round(sum(accept_length) / cnt_speculative_iterations, 3))
+        else:
+            from transformers import GenerationConfig, TextStreamer
+            generation_config = GenerationConfig.from_pretrained(
+                configs.modeling.model_path,
+                do_sample=False,
+                max_new_tokens=8000
+            )
+            generated = model.generate(**test_inputs,
+                generation_config=generation_config,
+                streamer=TextStreamer(tokenizer),
+            )
+            print('\n')
+            total_generated_tokens = len(generated[0])
 
     seconds = time.perf_counter() - start_time
-
-    print(accept_length)
-    print('num output tokens:', total_accept_tokens, f'in {seconds} sec')
-    print('tokens per second:', round(total_accept_tokens / seconds, 3))
-    print('max accept_length:', max(accept_length))
-    print('min accept_length:', min(accept_length))
-    print('avg accept_length:', round(sum(accept_length) / cnt, 3))
+    print('num output tokens:', total_generated_tokens, f'in {seconds} sec')
+    print('tokens per second:', round(total_generated_tokens / seconds, 3))
 
 
 if __name__ == '__main__':

@@ -7,6 +7,10 @@ from transformers import AutoConfig
 from colorama import Fore, Style
 
 
+def is_speculative_model(model):
+    return isinstance(model, SpecForgeLM)
+
+
 class SpecForgeLM():
     draft_model_path_prefix = '_draft_model'
 
