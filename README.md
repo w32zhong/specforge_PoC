@@ -55,11 +55,19 @@ CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --modeling.stand_alone_draft_model_key_adapt yuhuili
 ```
 
-To free from specifying model architecture, use saved json config:
+To free from specifying model architecture, use saved JSON config:
 ```sh
 CUDA_VISIBLE_DEVICES=0 python -m specforge_het.inferenc \
     --use_saved_json_config output/stellar-monkey-97/specforge_het.json \
     --modeling.stand_alone_draft_model_path output/stellar-monkey-97/checkpoint-84510/draft_model
+```
+or even better, with some CLI utilities, specify the checkpoint directory only:
+```sh
+read -p "# " path; echo $path | CUDA_VISIBLE_DEVICES=0 \
+    xargs -I {} python -m specforge_het.inference \
+    --use_saved_json_config {}/../specforge_het.json \
+    --modeling.stand_alone_draft_model_path {}/draft_model
+# output/stellar-monkey-97/checkpoint-84510/
 ```
 
 The inference script can be directly compared to the script from the original EAGLE reference implementation:
