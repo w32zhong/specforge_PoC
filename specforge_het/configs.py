@@ -83,3 +83,20 @@ class Configs():
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, fname), 'w') as fh:
             json.dump(self._configs, fh, indent=2, sort_keys=True)
+
+    def load_json(self, path='configs.json', warn_change_key_prefix='', ignore_keys=[]):
+        with open(path, 'r') as fh:
+            json_configs = json.load(fh)
+
+        for key in json_configs.keys():
+            new_val = json_configs[key]
+            if key not in self._configs:
+                old_val = None
+            else:
+                old_val = self._configs[key]
+
+            if (old_val != new_val and
+                key.startswith(warn_change_key_prefix) and
+                key not in ignore_keys):
+                print(f'changed key [{key}]:', old_val, '-->', new_val)
+                self._configs[key] = new_val

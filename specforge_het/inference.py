@@ -1,3 +1,4 @@
+import os
 import torch
 import time
 from specforge_het.configs import Configs
@@ -9,10 +10,17 @@ sys_instructions = "You are a helpful, respectful and honest assistant. Always a
 question = "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?"
 
 
-def main(config_file='configs.ini', **injects):
+def main(config_file='configs.ini', use_saved_json_config=None, **injects):
     configs = Configs.from_config_file(config_file, **injects)
+    if use_saved_json_config:
+        assert (isinstance(use_saved_json_config, str)
+            and os.path.exists(use_saved_json_config))
+        configs.load_json(use_saved_json_config,
+            warn_change_key_prefix='modeling.',
+            ignore_keys=['modeling.dtype', 'modeling.free_base_layers']
+                + list(injects.keys())
+        )
 
-    configs.set_obj('modeling.free_base_layers', None)
     tokenizer, model = load_models(configs.modeling)
 
     model.eval()
