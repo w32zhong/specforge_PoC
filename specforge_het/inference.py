@@ -40,9 +40,9 @@ def main(config_file='configs.ini', use_saved_json_config=None, **injects):
     print(tokenizer.batch_decode(test_inputs.input_ids), end='\n', flush=True)
     with torch.no_grad():
         if is_speculative_model(model):
-            cnt_speculative_iterations = 0
             eos = tokenizer.eos_token_id
-            accept_length = []
+            accept_length, iter_cost = [], []
+            start_iter_time = time.perf_counter()
             for tokens in model.speculative_generate(**test_inputs):
                 eos_pos = (tokens == eos).nonzero()
                 accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
@@ -52,14 +52,19 @@ def main(config_file='configs.ini', use_saved_json_config=None, **injects):
                 if eos_pos.numel() > 0:
                     break
                 accept_length.append(len(accept_tokens))
-                cnt_speculative_iterations += 1
+                iter_cost.append(time.perf_counter() - start_iter_time)
+                start_iter_time = time.perf_counter()
             print('\n')
             accept_length.pop(0) # exclude pre-fill
+            prefill_cost = iter_cost.pop(0)
+            n_iters = len(iter_cost)
 
             print(accept_length)
+            print('prefilling cost:', round(prefill_cost, 3))
+            print('decoding cost:', round(sum(iter_cost) / n_iters, 3))
             print('max accept_length:', max(accept_length))
             print('min accept_length:', min(accept_length))
-            print('avg accept_length:', round(sum(accept_length) / cnt_speculative_iterations, 3))
+            print('avg accept_length:', round(sum(accept_length) / n_iters, 3))
         else:
             from transformers import GenerationConfig, TextStreamer
             generation_config = GenerationConfig.from_pretrained(
