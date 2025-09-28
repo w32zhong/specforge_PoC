@@ -57,7 +57,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
 
 To free from specifying model architecture, use saved JSON config:
 ```sh
-CUDA_VISIBLE_DEVICES=0 python -m specforge_het.inferenc \
+CUDA_VISIBLE_DEVICES=0 python -m specforge_het.inference \
     --use_saved_json_config output/stellar-monkey-97/specforge_het.json \
     --modeling.stand_alone_draft_model_path output/stellar-monkey-97/checkpoint-84510/draft_model
 ```
