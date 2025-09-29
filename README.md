@@ -86,7 +86,6 @@ Useful options:
 For a demo of using SGLang as inference engine for a trained model:
 ```sh
 CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py \
-    /mnt/asus_card/hfdownloader/Qwen_Qwen3-4B-Instruct-2507 \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
     --speculative_algorithm EAGLE # EAGLE-v2
 ```

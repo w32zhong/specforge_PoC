@@ -3,6 +3,8 @@ import asyncio
 from transformers import AutoTokenizer
 import sglang as sgl
 from sglang.utils import trim_overlap
+import specforge_het.sglang_adapter
+
 
 async def generate(llm, tokenizer, prompt, sampling_params):
     final_text = ""
@@ -29,9 +31,8 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
     return cnt_tokens
 
 
-def main(base_model_path, draft_model_path, speculative_algorithm=None,
+def main(model_path, speculative_algorithm=None,
          speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
-    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
     questions = [
         "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
         "Who is the president of the United States?",
@@ -44,6 +45,10 @@ def main(base_model_path, draft_model_path, speculative_algorithm=None,
         "Provide a concise factual statement about France’s capital city."
     ][:bs]
     messages = lambda question: [{"role": "user", "content": question}]
+
+    base_model_path, draft_model_path = specforge_het.sglang_adapter.adapted(model_path)
+
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
     prompts = [
         tokenizer.apply_chat_template(
             messages(Q), tokenize=False, add_generation_prompt=True
@@ -51,7 +56,6 @@ def main(base_model_path, draft_model_path, speculative_algorithm=None,
     ]
 
     from sglang.srt.server_args import ServerArgs
-    #from sglang.srt.models.qwen3_spec import Qwen3ForCausalLMEagle
     llm = sgl.Engine(
         model_path=base_model_path,
         tp_size=tp_size,
@@ -64,6 +68,7 @@ def main(base_model_path, draft_model_path, speculative_algorithm=None,
         speculative_eagle_topk=speculative_tree[1],
         speculative_num_draft_tokens=speculative_tree[2],
     )
+
 
     sampling_params = {"temperature": 0, "max_new_tokens": 8000}
 
@@ -80,7 +85,7 @@ def main(base_model_path, draft_model_path, speculative_algorithm=None,
             )
 
         # timed run
-        print('=' * 30)
+        print('\n', '=' * 30)
         begin = time.perf_counter()
         if bs > 1:
             cnt_tokens = batch_generate(llm, tokenizer, prompts, sampling_params)
