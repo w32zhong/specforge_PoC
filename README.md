@@ -1,7 +1,7 @@
 # specforge PoC
 This is a Proof-of-Concept implementation for speculative decoding framework that supports heterogeneous (het.) base and draft models.
 
-For a demo of what is heterogeneous models, refer to the [demo.py](./demo.py) file.
+For a demo of what is heterogeneous models, refer to the [demo file](./demo_concept.py).
 
 ## Setup
 ```
@@ -40,7 +40,9 @@ Useful options:
 * To add evaluation data: `--dataset.eval_path <path>`.
 * To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
 
-## Inference
+## Built-In Inference
+Currently the built-in inference only guarantees correctness algorithmically, without inference speed optimization.
+
 ```sh
 CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
@@ -79,3 +81,12 @@ CUDA_VISIBLE_DEVICES=0,1 python application/test.py
 
 Useful options:
 * To specify GPU VRAM allocations: `--modeling.max_memory "{0: '17.5GiB', 1: '17GiB', 2: '13.5GiB', 3: '17GiB'}"`
+
+## SGLang Inference
+For a demo of using SGLang as inference engine for a trained model:
+```sh
+CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py \
+    /mnt/asus_card/hfdownloader/Qwen_Qwen3-4B-Instruct-2507 \
+    /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
+    --speculative_algorithm EAGLE # EAGLE-v2
+```
