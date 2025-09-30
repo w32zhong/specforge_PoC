@@ -26,7 +26,7 @@ class SpecForgeLM():
     def set_draft_model(self, model, **kwargs):
         self.config.speculative_decoding_draft_model = model.__class__.__name__
         setattr(self, self.draft_model_path_prefix, model)
-        self.on_draft_model_set(**kwargs)
+        self.bind_model(**kwargs)
 
     @classmethod
     def from_pretrained(cls, path, **kwargs):
@@ -60,7 +60,7 @@ class SpecForgeLM():
         model.modeling_file = sys.modules[cls.__module__].__file__
         merge_kwargs = base_config.to_dict()
         merge_kwargs.update(algo_kwargs)
-        AlgoClass.__init__(model, **merge_kwargs)
+        AlgoClass.configure(model.config, **merge_kwargs)
         return model
 
     def save_speculative_model(self, path, **kwargs):

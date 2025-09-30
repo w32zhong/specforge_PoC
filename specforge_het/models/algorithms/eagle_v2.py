@@ -68,34 +68,40 @@ def prediction_accuracy(logits, labels, *, topk=10):
 
 
 class EagleV2:
-    def __init__(self, draft_layers=1,
+
+    # This `configure` function is called prior to draft model attachment,
+    # draft model would read the written configurations and potentially vary
+    # its model structures.
+    @staticmethod
+    def configure(config, draft_layers=1,
                  skip_first_input_layernorm=True,
                  skip_output_norm=True,
                  ploss_w=0.1,
                  vloss_w=1.0,
                  **kwargs):
-        self.config.draft_layers = draft_layers
-        self.config.skip_first_input_layernorm = skip_first_input_layernorm
-        self.config.skip_output_norm = skip_output_norm
-        self.config.ploss_w = ploss_w
-        self.config.vloss_w = vloss_w
+        config.draft_layers = draft_layers
+        config.skip_first_input_layernorm = skip_first_input_layernorm
+        config.skip_output_norm = skip_output_norm
+        config.ploss_w = ploss_w
+        config.vloss_w = vloss_w
 
-    def on_draft_model_set(self, load_device=None):
-        if load_device is None:
-            if len(self.get_base_layers()) > 0:
-                last_device = next(self.get_base_layers()[-1].parameters()).device
-            else:
-                last_device = self.device
-            load_device = last_device
-
+    # This `bind_model` function is called after the draft model attachment,
+    # to fully "bind" the underlying model(s) to the algorithm.
+    def bind_model(self, load_device='last_device'):
         hidden_size = self.get_hidden_size()
         self.draft_model.eagle_fc = torch.nn.Linear(
             2 * hidden_size, hidden_size, bias=True
         )
 
-        self.draft_model.to(device=load_device, dtype=self.base_model.dtype)
-
         self.smooth_l1 = torch.nn.SmoothL1Loss(reduction="none")
+
+        if load_device == 'last_device':
+            if len(self.get_base_layers()) > 0:
+                last_device = next(self.get_base_layers()[-1].parameters()).device
+            else:
+                last_device = self.device
+            load_device = last_device
+            self.draft_model.to(device=load_device, dtype=self.base_model.dtype)
 
     @staticmethod
     def eagle_noise(tensor):

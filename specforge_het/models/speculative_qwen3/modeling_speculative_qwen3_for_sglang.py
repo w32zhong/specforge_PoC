@@ -1,39 +1,61 @@
+import json
 import torch
+from colorama import Fore, Style
+from specforge_het.models import *
 from sglang.srt.layers.quantization.base_config import QuantizationConfig # resolve circ dep
 from sglang.srt.models.qwen3 import *
 from sglang.srt.utils import add_prefix
+
 
 class Qwen3DrafterForSGLang(Qwen3ForCausalLM):
     def __init__(self,
         config: Qwen3Config,
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = ""):
+
+        # move and store base model config
+        self._base_model_config_ = json.loads(config._base_model_config)
+        delattr(config, '_base_model_config')
+
+        # call default SGLang constructor
         super().__init__(config, quant_config, prefix)
-        self.lm_head = ParallelLMHead(
-            config.vocab_size,
-            config.hidden_size,
-            quant_config=quant_config,
-            prefix=add_prefix("lm_head", prefix),
-        )
 
+        self.model.layers[0].input_layernorm = torch.nn.Identity()
+        self.model.norm = torch.nn.Identity()
+        del self.lm_head
+        del self.model.embed_tokens
+
+        # bind the algorithm
+        speculative_algorithm = self._base_model_config_['speculative_decoding_algorithm']
+        AlgoClass = eval(speculative_algorithm)
+        AlgoClass.bind_model(self, load_device=None)
+
+    # adaptor methods for EagleV2
+    @property
+    def draft_model(self):
+        return self.model
+
+    def get_hidden_size(self):
+        return self.config.hidden_size
+
+    # overriding SGLang methods
     def load_weights(self, weights):
-        import rpdb; rpdb.set_trace()
+        weights = [(add_prefix(k, "model"), v) for k, v in weights]
 
-    #def __init__(self, draft_config, base_model):
-    #    draft_config.num_hidden_layers = base_model.config.draft_layers
-    #    draft_config.hidden_size = base_model.get_hidden_size()
-    #    super().__init__(draft_config)
+        model_params_keys = set([key for key, _ in self.named_parameters()])
+        load_weights_keys = set([key for key, _ in weights])
 
-    #    if base_model.config.skip_first_input_layernorm:
-    #        layer = self.layers[0]
-    #        delattr(layer, 'input_layernorm')
-    #        layer.input_layernorm = torch.nn.Identity()
+        expect_extra_keys = model_params_keys - load_weights_keys
+        loading_extra_keys = load_weights_keys - model_params_keys
 
-    #    if base_model.config.skip_output_norm:
-    #        delattr(self, 'norm')
-    #        self.norm = torch.nn.Identity()
+        if expect_extra_keys or loading_extra_keys:
+            print(
+                f'{Fore.YELLOW}Loading weight keys mismatch: \n\n' +
+                f'model_params_keys: {model_params_keys}\n\n' +
+                f'expect_extra_keys: {expect_extra_keys}\n\n' +
+                f'loading_extra_keys: {loading_extra_keys}\n\n' +
+                Style.RESET_ALL
+            )
+            #import rpdb; rpdb.set_trace()
 
-    #    delattr(self, 'embed_tokens')
-
-    #def get_hidden_size(self):
-    #    return self.config.hidden_size
+        super().load_weights(weights)

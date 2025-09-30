@@ -14,10 +14,20 @@ def adapted(model_path):
     draft_model_path = f'{model_path}/draft_model'
     draft_model_config = AutoConfig.from_pretrained(draft_model_path)
 
-    # inplace modification!
+    # any inplace modification?
+    overwrite = False
+
     draft_model_arch = base_model_config.speculative_decoding_draft_model + 'ForSGLang'
     if draft_model_arch not in draft_model_config.architectures:
         draft_model_config.architectures.insert(0, draft_model_arch)
+        overwrite = True
+
+    base_key = '_base_model_config'
+    if base_key not in draft_model_config:
+        setattr(draft_model_config, base_key, base_model_config.to_json_string())
+        overwrite = True
+
+    if overwrite:
         print('overwriting draft model config to support SGLang!')
         draft_model_config.save_pretrained(draft_model_path)
 
