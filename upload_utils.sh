@@ -10,7 +10,7 @@ USAGE
 exit
 fi
 
-[ $# -lt 1 ] && echo 'bad arg.' && exit
+[ $# -le 1 ] && echo 'bad arg.' && exit
 
 hgf_account=${1}
 shift 1
