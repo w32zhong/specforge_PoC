@@ -1,8 +1,8 @@
-import json
 import torch
 from functools import partial
-from colorama import Fore, Style
-from specforge_het.models import *
+
+from specforge_het.sglang_adapter_mixin import SGLangAdapterMixin
+
 from sglang.srt.layers.quantization.base_config import QuantizationConfig # resolve circ dep
 from sglang.srt.models.qwen3 import *
 from sglang.srt.utils import add_prefix
@@ -44,51 +44,23 @@ def EagleV2_adapt(self, base_model_config, draft_model_config):
                                  origin_forward=self.model.forward)
 
 
-
-class Qwen3DrafterForSGLang(Qwen3ForCausalLM):
+class Qwen3DrafterForSGLang(Qwen3ForCausalLM, SGLangAdapterMixin):
     def __init__(self,
         config: Qwen3Config,
         quant_config: Optional[QuantizationConfig] = None,
         prefix: str = ""):
 
-        # move and store base model config
-        base_model_config = json.loads(config._base_model_config)
-        delattr(config, '_base_model_config')
-
-        # call default SGLang constructor
         super().__init__(config, quant_config, prefix)
 
-        # bind the algorithm
-        speculative_algorithm = base_model_config['speculative_decoding_algorithm']
-        AlgoClass = eval(speculative_algorithm)
-        AlgoClass.bind_model(self, load_device=None)
-
-        if AlgoClass.__name__ == 'EagleV2':
-            EagleV2_adapt(self, base_model_config, config)
+        algo_cls, base_model_cfg, draft_model_cfg = self.bind_adapter(config)
+        if algo_cls == 'EagleV2':
+            EagleV2_adapt(self, base_model_cfg, draft_model_cfg)
         else:
-            raise NotImplementedError
+            raise NotImplemented
 
-    # overriding SGLang methods
     def load_weights(self, weights):
         weights = [(add_prefix(k, "model"), v) for k, v in weights]
-
-        model_params_keys = set([key for key, _ in self.named_parameters()])
-        load_weights_keys = set([key for key, _ in weights])
-
-        expect_extra_keys = model_params_keys - load_weights_keys
-        loading_extra_keys = load_weights_keys - model_params_keys
-
-        if expect_extra_keys or loading_extra_keys:
-            print(
-                f'{Fore.YELLOW}Loading weight keys mismatch: \n\n' +
-                f'model_params_keys: {model_params_keys}\n\n' +
-                f'expect_extra_keys: {expect_extra_keys}\n\n' +
-                f'loading_extra_keys: {loading_extra_keys}\n\n' +
-                Style.RESET_ALL
-            )
-            #import rpdb; rpdb.set_trace()
-
-        super().load_weights(weights)
+        super().load_weights(self.warn_unmatch_weights(weights))
 
     # speculative decoding algorithm interfaces
     @property
