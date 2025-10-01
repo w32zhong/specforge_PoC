@@ -1,7 +1,7 @@
 # specforge PoC
-This is a Proof-of-Concept implementation for speculative decoding framework that supports heterogeneous (het.) base and draft models.
+This is a Proof-of-Concept implementation for a speculative decoding framework that supports heterogeneous (het.) base and draft models.
 
-For a demo of what is heterogeneous models, refer to the [demo file](./demo_concept.py).
+For a demo of what a heterogeneous speculative decoding model is, please check out a [demo here](./demo_concept.py).
 
 ## Setup
 ```
@@ -41,8 +41,7 @@ Useful options:
 * To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
 
 ## Built-In Inference
-Currently the built-in inference only guarantees correctness algorithmically, without inference speed optimization.
-
+Currently, the built-in inference only guarantees correctness algorithmically, without any inference speed optimizations.
 ```sh
 CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
@@ -57,13 +56,13 @@ CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --modeling.stand_alone_draft_model_key_adapt yuhuili
 ```
 
-To free from specifying model architecture, use saved JSON config:
+To be free from specifying model architecture, use the saved JSON config:
 ```sh
 CUDA_VISIBLE_DEVICES=0 python -m specforge_het.inference \
     --use_saved_json_config output/stellar-monkey-97/specforge_het.json \
     --modeling.stand_alone_draft_model_path output/stellar-monkey-97/checkpoint-84510/draft_model
 ```
-or even better, with some CLI utilities, specify the checkpoint directory only:
+Or, even better, with some CLI utilities, specify the checkpoint directory only:
 ```sh
 read -p "# " path; echo $path | CUDA_VISIBLE_DEVICES=0 \
     xargs -I {} python -m specforge_het.inference \
@@ -83,7 +82,7 @@ Useful options:
 * To specify GPU VRAM allocations: `--modeling.max_memory "{0: '17.5GiB', 1: '17GiB', 2: '13.5GiB', 3: '17GiB'}"`
 
 ## SGLang Inference
-For a demo of using SGLang as inference engine for a trained model:
+For a demo of using SGLang as an inference engine for a model trained by this framework:
 ```sh
 CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
