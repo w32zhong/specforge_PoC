@@ -40,8 +40,13 @@ Useful options:
 * To add evaluation data: `--dataset.eval_path <path>`.
 * To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
 
+Alternatively, download pre-trained models from my HuggingFace hub: https://huggingface.co/w32zhong/models
+
+A robust and fast way to download HuggingFace models is using [hfdownloader](https://github.com/bodaay/HuggingFaceModelDownloader).
+This is the reason you see some of the command lines containing example model paths under a folder called `hfdownloader`.
+
 ## Built-In Inference
-Currently, the built-in inference only guarantees correctness algorithmically, without any inference speed optimizations.
+Currently, the built-in inference only guarantees correctness algorithmically, without any optimizations for inference speed.
 ```sh
 CUDA_VISIBLE_DEVICES=0,1 python -m specforge_het.inference \
     --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
