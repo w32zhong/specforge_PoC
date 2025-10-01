@@ -89,3 +89,17 @@ CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
     --speculative_algorithm EAGLE # EAGLE-v2
 ```
+
+Because SGLang is somewhat a complicated software stack and is hard to install,
+it is recommended to use a container build. In this case, a good workflow would be:
+```sh
+source docker_utils.sh
+build specforge_het_and_sglang
+# run a detached container in the background
+HF_TOKEN=YOUR_TOKEN docker run -d \
+    --env HF_TOKEN=$HF_TOKEN --gpus all --ipc=host --ulimit memlock=-1 \
+    -v $HOME/.cache:/root/.cache -v `pwd`/nvim_plugins:/root/.local/share/nvim \
+    -v `pwd`:/workspace/mnt -it specforge_het_and_sglang /bin/bash
+docker ps # find this active container
+docker exec -it <container name or ID> bash # attach to it
+```
