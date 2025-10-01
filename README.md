@@ -107,7 +107,9 @@ CUDA_VISIBLE_DEVICES=0 python ./demo_sglang_inference.py server_mode \
     --speculative-eagle-topk 10 \
     --speculative-num-draft-tokens 60 \
     --dtype bfloat16 --mem-fraction-static 0.7
+    # Some useful debug options:
     # --disable-cuda-graph
+    # --disable-radix-cache
 ```
 
 To run a quick MT-Bench evaluation, use the SGLang benchmark script:
