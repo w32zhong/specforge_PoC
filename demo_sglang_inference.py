@@ -1,9 +1,17 @@
 import time
 import asyncio
 from transformers import AutoTokenizer
+
 import sglang as sgl
 from sglang.utils import trim_overlap
-import specforge_het.sglang_adapter
+
+import os, sys, argparse
+from sglang.srt.server_args import ServerArgs
+from sglang.srt.entrypoints.http_server import launch_server
+from sglang.srt.server_args import prepare_server_args
+from sglang.srt.utils import kill_process_tree
+
+import specforge_het.sglang_adapter as sf_adapter
 
 
 async def generate(llm, tokenizer, prompt, sampling_params):
@@ -31,7 +39,7 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
     return cnt_tokens
 
 
-def main(model_path, speculative_algorithm=None,
+def direct_mode(model_path, speculative_algorithm=None,
          speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
     questions = [
         "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
@@ -46,7 +54,7 @@ def main(model_path, speculative_algorithm=None,
     ][:bs]
     messages = lambda question: [{"role": "user", "content": question}]
 
-    base_model_path, draft_model_path = specforge_het.sglang_adapter.adapted(model_path)
+    base_model_path, draft_model_path = sf_adapter.adapted(model_path)
 
     tokenizer = AutoTokenizer.from_pretrained(base_model_path)
     prompts = [
@@ -55,7 +63,6 @@ def main(model_path, speculative_algorithm=None,
         ) for Q in questions
     ]
 
-    from sglang.srt.server_args import ServerArgs
     llm = sgl.Engine(
         model_path=base_model_path,
         tp_size=tp_size,
@@ -110,7 +117,21 @@ def main(model_path, speculative_algorithm=None,
     print('avg accept length:', sum(cnt_tokens) / len(cnt_tokens))
 
 
+def server_mode():
+    parser = argparse.ArgumentParser()
+    ServerArgs.add_cli_args(parser)
+    raw_args = parser.parse_args(sys.argv[2:]) # skip <script name> and <Fire mode>
+    base_model_path, draft_model_path = sf_adapter.adapted(raw_args.model_path)
+    raw_args.model_path = base_model_path
+    raw_args.speculative_draft_model_path = draft_model_path
+    server_args = ServerArgs.from_cli_args(raw_args)
+    try:
+        launch_server(server_args)
+    finally:
+        kill_process_tree(os.getpid(), include_parent=False)
+
+
 if __name__ == '__main__':
-    import fire, os
+    import fire
     os.environ["PAGER"] = "cat"
-    fire.Fire(main)
+    fire.Fire(dict(direct_mode=direct_mode, server_mode=server_mode))

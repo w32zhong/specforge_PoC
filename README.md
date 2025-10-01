@@ -89,9 +89,30 @@ Useful options:
 ## SGLang Inference
 For a demo of using SGLang as an inference engine for a model trained by this framework:
 ```sh
-CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py \
+# direct mode
+CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py direct_mode \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
     --speculative_algorithm EAGLE # EAGLE-v2
+```
+Since first-time running forward function would require compiling cache modules
+and it may take minutes!
+As a result, a fair inference time evaluation usually invokes the server mode:
+```sh
+# server mode
+CUDA_VISIBLE_DEVICES=0 python ./demo_sglang_inference.py server_mode \
+    --model output/deft-bee-66/ \
+    --speculative-algo EAGLE \
+    --speculative-num-steps 6 \
+    --speculative-eagle-topk 10 \
+    --speculative-num-draft-tokens 60 \
+    --dtype float16 --mem-fraction-static 0.7
+```
+
+To run a quick MT-Bench evaluation, use the SGLang benchmark script:
+```
+cd path/to/sglang/benchmark/mtbench
+wget -O question.jsonl https://raw.githubusercontent.com/lm-sys/FastChat/main/fastchat/llm_judge/data/mt_bench/question.jsonl
+python bench_sglang_eagle.py --parallel 1 --num-questions 10
 ```
 
 Because SGLang is somewhat a complicated software stack and is hard to install,
