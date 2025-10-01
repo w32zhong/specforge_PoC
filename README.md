@@ -92,6 +92,7 @@ For a demo of using SGLang as an inference engine for a model trained by this fr
 # direct mode
 CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py direct_mode \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
+    --dtype bfloat16 --disable_cuda_graph \
     --speculative_algorithm EAGLE # EAGLE-v2
 ```
 Since first-time running forward function would require compiling cache modules
@@ -105,7 +106,8 @@ CUDA_VISIBLE_DEVICES=0 python ./demo_sglang_inference.py server_mode \
     --speculative-num-steps 6 \
     --speculative-eagle-topk 10 \
     --speculative-num-draft-tokens 60 \
-    --dtype float16 --mem-fraction-static 0.7
+    --dtype bfloat16 --mem-fraction-static 0.7
+    # --disable-cuda-graph
 ```
 
 To run a quick MT-Bench evaluation, use the SGLang benchmark script:

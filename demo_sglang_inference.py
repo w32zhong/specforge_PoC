@@ -39,7 +39,7 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
     return cnt_tokens
 
 
-def direct_mode(model_path, speculative_algorithm=None,
+def direct_mode(model_path, speculative_algorithm=None, dtype='auto',
          speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
     questions = [
         "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
@@ -65,6 +65,7 @@ def direct_mode(model_path, speculative_algorithm=None,
 
     llm = sgl.Engine(
         model_path=base_model_path,
+        dtype=dtype,
         tp_size=tp_size,
         cuda_graph_max_bs=bs,
         disable_cuda_graph=disable_cuda_graph,
