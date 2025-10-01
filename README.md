@@ -107,3 +107,5 @@ HF_TOKEN=YOUR_TOKEN docker run -d \
 docker ps # find this active container
 docker exec -it <container name or ID> bash # attach to it
 ```
+
+Note: the default underlying backend (FlashInfer) will build cache files under `~/.cache/flashinfer` on inference startup, be sure to remove them if you want to measure the real load-up time.
