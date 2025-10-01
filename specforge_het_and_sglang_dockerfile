@@ -36,7 +36,7 @@ RUN npm install -g pyright
 # sglang
 RUN apt install -y libnuma1 libnuma-dev # some missing system libs
 RUN git clone --depth=1 -b v0.5.2 https://github.com/sgl-project/sglang.git && \
-    cd sglang/python && pip install -e . && pip install -e ".[srt]" # SGLang Run Time
+    cd sglang/python && pip install . && pip install ".[srt]" # SGLang Run Time
 # specforge_PoC
 RUN wget https://raw.githubusercontent.com/w32zhong/specforge_PoC/refs/heads/master/specforge_het/requirements.txt -O r.txt
 RUN bash -c "pip install -r <(grep -v -i '^transformers\b' r.txt)" # transformers version is up to SGLang
