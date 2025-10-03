@@ -1,69 +1,239 @@
-import time
 import asyncio
-from transformers import AutoTokenizer
+import threading
+import time, json, os, sys, argparse
+from functools import partial
+from queue import Queue
 
 import sglang as sgl
 from sglang.utils import trim_overlap
-
-import os, sys, argparse
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.entrypoints.http_server import launch_server
-from sglang.srt.server_args import prepare_server_args
 from sglang.srt.utils import kill_process_tree
+from sglang.lang.backend.base_backend import BaseBackend
+from sglang.global_config import global_config
+from sglang.lang.ir import SglGen
 
-import specforge_het.sglang_adapter as sf_adapter
+import specforge_het.sglang_adapter as sgl_adapter
 
 
-async def generate(llm, tokenizer, prompt, sampling_params):
-    final_text = ""
-    cnt_tokens = []
-    print(prompt)
-    generator = await llm.async_generate(prompt, sampling_params, stream=True)
-    async for chunk in generator:
-        chunk_text = chunk["text"]
-        cleaned_chunk = trim_overlap(final_text, chunk_text)
-        final_text += cleaned_chunk
-        print(tokenizer.decode(chunk['output_ids']), end="", flush=True)
-        cnt_tokens.append(len(chunk['output_ids']))
-    return cnt_tokens
+class LoopRunner:
+    """ Becasue submit() can be called from different threads.
+        This class is designed to owns a dedicated asyncio loop
+        living on a background thread, and relaying all submit
+        calls in a run_coroutine_threadsafe().
+    """
+
+    def __init__(self):
+        self._loop = None
+        self._loop_ready = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        self._loop_ready.wait()
+
+    def _run(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._loop = loop
+        self._loop_ready.set()
+        loop.run_forever()
+
+    @property
+    def loop(self):
+        self._loop_ready.wait()
+        return self._loop
+
+    def submit(self, coro):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop)
+
+    def shutdown(self):
+        def _shutdown():
+            for task in asyncio.all_tasks(loop=self.loop):
+                task.cancel()
+            self.loop.stop()
+        self.loop.call_soon_threadsafe(_shutdown)
+        self._thread.join()
+        self.loop.close()
+
+
+def stream_generate(llm, tokenizer, prompt, sampling_params):
+    queue = Queue()
+    async def _stream_once():
+        try:
+            generator = await llm.async_generate(prompt, sampling_params, stream=True)
+            async for chunk in generator:
+                queue.put(chunk)
+        finally:
+            queue.put(None)
+
+    runner = llm._loop_runner
+    future = runner.submit(_stream_once())
+
+    text = ""
+    acc_tokens = []
+    print([prompt])
+    while True:
+        item = queue.get()
+        if item is None:
+            break
+
+        chunk_text = item["text"]
+        cleaned_chunk = trim_overlap(text, chunk_text)
+        text += cleaned_chunk
+        print(tokenizer.decode(item["output_ids"]), end="", flush=True)
+        acc_tokens.append(item["output_ids"])
+
+    # Surface any exception from the background coroutine.
+    future.result()
+    print()
+
+    return acc_tokens, text
 
 
 def batch_generate(llm, tokenizer, prompts, sampling_params):
-    cnt_tokens = []
-    outputs = llm.generate(prompts, sampling_params)
+    async def _batch_once():
+        return await llm.async_generate(prompts, sampling_params, stream=False)
+
+    runner = llm._loop_runner
+    outputs = runner.submit(_batch_once()).result()
+
+    batch_tokens, batch_texts = [], []
     for prompt, output in zip(prompts, outputs):
         print("===============================")
-        print(f"Prompt: {prompt}\nGenerated text: {output['text']}")
-        tokens = tokenizer.encode(output['text'])
-        cnt_tokens.append(len(tokens))
-    return cnt_tokens
+        print([prompt])
+        print(output['text'])
+        tokens = tokenizer.encode(output["text"])
+        batch_tokens.append(tokens)
+        batch_texts.append(output["text"])
+    return batch_tokens, batch_texts 
 
 
-def engine_mode(model_path, speculative_algorithm=None, dtype='auto',
-         speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
-    questions = [
-        "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
-        "Who is the president of the United States?",
-        "Write an essay about the future of AI.",
-        "What is your favorite book?",
-        "What is your least favorite book?",
-        "What is your favorite programming language?",
-        "What is your least favorite programming language?",
-        "Write a short, neutral self-introduction for a fictional character.",
-        "Provide a concise factual statement about France’s capital city."
-    ][:bs]
-    messages = lambda question: [{"role": "user", "content": question}]
+def run_one_example(llm, prompts, sampling_params, bs):
+    tokenizer = llm.tokenizer_manager.tokenizer
 
-    base_model_path, draft_model_path = sf_adapter.adapted(model_path)
+    # warm-up run
+    if bs > 1:
+        batch_generate(llm, tokenizer, prompts, sampling_params)
+    else:
+        stream_generate(llm, tokenizer, prompts[0], sampling_params)
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
-    prompts = [
-        tokenizer.apply_chat_template(
-            messages(Q), tokenize=False, add_generation_prompt=True
-        ) for Q in questions
+    # timed run
+    begin = time.perf_counter()
+    if bs > 1:
+        acc_tokens, _ = batch_generate(llm, tokenizer, prompts, sampling_params)
+    else:
+        acc_tokens, _ = stream_generate(llm, tokenizer, prompts[0], sampling_params)
+        if acc_tokens: acc_tokens.pop(0)
+    time_cost = time.perf_counter() - begin
+
+    print()
+    token_nums = [len(t) for t in acc_tokens]
+    print(token_nums)
+    print('tokens and time:', sum(token_nums), time_cost)
+    print('e2e throughputs:', sum(token_nums) / time_cost)
+    if bs == 1:
+        print('max accept length:', max(token_nums))
+        print('min accept length:', min(token_nums))
+        print('avg accept length:', sum(token_nums) / len(token_nums))
+
+
+def load_mtbench(filename):
+    questions = []
+    with open(filename, "r") as fin:
+        for line in fin:
+            obj = json.loads(line)
+            questions.append(obj)
+    return questions
+
+
+class MonkeyPatchLangBackend(BaseBackend):
+    def __init__(self, llm):
+        super().__init__()
+        self.monkey_patch_llm = llm
+
+    def generate(self, prompt, sampling_params):
+        llm = self.monkey_patch_llm
+        tokenizer = llm.tokenizer_manager.tokenizer
+        batch_tokens, batch_texts = batch_generate(
+            llm,
+            tokenizer,
+            [prompt],
+            sampling_params.to_srt_kwargs(),
+        )
+        return batch_tokens[0], batch_texts[0]
+
+
+def monkey_patch_execute(self, origin_execute_fn, state, other):
+    if isinstance(other, SglGen):
+        messages = self.messages_
+        llm = self.backend.monkey_patch_llm
+        tokenizer = llm.tokenizer_manager.tokenizer
+        prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        tokens, text = self.backend.generate(
+            prompt, sampling_params=self.default_sampling_para,
+        )
+
+        name = other.name
+        self.variables[name] = text
+        self.meta_info[name] = tokens
+        self.variable_event[name].set()
+
+    else:
+        return origin_execute_fn(other)
+
+
+@sgl.function
+def answer_mt_bench(s, question_1, question_2):
+    s.stream_executor._execute = partial(
+        monkey_patch_execute,
+        s.stream_executor,
+        s.stream_executor._execute,
+        s
+    )
+    s += sgl.user(question_1)
+    s += sgl.assistant(sgl.gen("answer_1"))
+    s += sgl.user(question_2)
+    s += sgl.assistant(sgl.gen("answer_2"))
+
+
+def run_mtbench(llm, questions, sampling_params, num_threads):
+    global_config.enable_precache_with_tracing = False
+    sgl.set_default_backend(MonkeyPatchLangBackend(llm))
+
+    question_turns = [
+        {"question_1": q["turns"][0], "question_2": q["turns"][1]}
+        for q in questions
     ]
 
-    llm = sgl.Engine(
+    begin = time.perf_counter()
+    res = answer_mt_bench.run_batch(
+        question_turns,
+        **sampling_params,
+        num_threads=num_threads,
+        progress_bar=True
+    )
+    time_cost = time.perf_counter() - begin
+
+    token_nums = 0
+    for i, Q in enumerate(question_turns):
+        print([Q['question_1']])
+        print(res[i].get_var('answer_1'))
+        token_nums += len(res[i].get_meta_info('answer_1'))
+        print([Q['question_2']])
+        print(res[i].get_var('answer_2'))
+        token_nums += len(res[i].get_meta_info('answer_2'))
+
+    print()
+    print('tokens and time:', token_nums, time_cost)
+    print('e2e throughputs:', token_nums / time_cost)
+
+
+def engine_mode(model_path, speculative_algorithm=None, dtype='auto', mtbench=None,
+                speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
+
+    base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
+    engine_kwargs = dict(
         model_path=base_model_path,
         dtype=dtype,
         tp_size=tp_size,
@@ -76,53 +246,50 @@ def engine_mode(model_path, speculative_algorithm=None, dtype='auto',
         speculative_eagle_topk=speculative_tree[1],
         speculative_num_draft_tokens=speculative_tree[2],
     )
-
-
     sampling_params = {"temperature": 0, "max_new_tokens": 8000}
 
-    # Use a shared event loop for both sync and async paths so background
-    # tokenizer tasks stay on the same loop even after the warmup request.
-    loop = asyncio.get_event_loop()
-    try:
-        # warm-up run
-        if bs > 1:
-            batch_generate(llm, tokenizer, prompts, sampling_params)
-        else:
-            loop.run_until_complete(
-                generate(llm, tokenizer, prompts[0], sampling_params)
-            )
+    llm = sgl.Engine(**engine_kwargs)
+    llm._loop_runner = LoopRunner()
+    if mtbench is None:
+        questions = [
+            "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
+            "Who is the president of the United States?",
+            "Write an essay about the future of AI.",
+            "What is your favorite book?",
+            "What is your least favorite book?",
+            "What is your favorite programming language?",
+            "What is your least favorite programming language?",
+            "Write a short, neutral self-introduction for a fictional character.",
+            "Provide a concise factual statement about France’s capital city."
+        ]
+        bs = min(len(questions), bs)
+        messages = lambda question: [{"role": "user", "content": question}]
+        tokenizer = llm.tokenizer_manager.tokenizer
+        prompts = [
+            tokenizer.apply_chat_template(
+                messages(Q), tokenize=False, add_generation_prompt=True
+            ) for Q in questions[:bs]
+        ]
 
-        # timed run
-        print('\n', '=' * 30)
-        begin = time.perf_counter()
-        if bs > 1:
-            cnt_tokens = batch_generate(llm, tokenizer, prompts, sampling_params)
-        else:
-            cnt_tokens = loop.run_until_complete(
-                generate(llm, tokenizer, prompts[0], sampling_params)
-            )
-            if cnt_tokens:
-                cnt_tokens.pop(0)
-        time_cost = time.perf_counter() - begin
+        run_one_example(llm, prompts, sampling_params, bs)
 
-    finally:
-        llm.shutdown()
-        loop.close()
+    else:
+        questions_jsonl, *after = mtbench.split(':')
+        questions_num = 80 if len(after) == 0 else int(after[0])
+        questions = load_mtbench(questions_jsonl)[: questions_num]
+        bs = min(questions_num, bs)
 
-    print()
-    print(cnt_tokens)
-    print('tokens and time:', sum(cnt_tokens), time_cost)
-    print('e2e throughputs:', sum(cnt_tokens) / time_cost)
-    print('max accept length:', max(cnt_tokens))
-    print('min accept length:', min(cnt_tokens))
-    print('avg accept length:', sum(cnt_tokens) / len(cnt_tokens))
+        run_mtbench(llm, questions, sampling_params, num_threads=bs)
+
+    llm._loop_runner.shutdown()
+    llm.shutdown()
 
 
 def server_mode():
     parser = argparse.ArgumentParser()
     ServerArgs.add_cli_args(parser)
     raw_args = parser.parse_args(sys.argv[2:]) # skip <script name> and <Fire mode>
-    base_model_path, draft_model_path = sf_adapter.adapted(raw_args.model_path)
+    base_model_path, draft_model_path = sgl_adapter.adapted(raw_args.model_path)
     raw_args.model_path = base_model_path
     raw_args.speculative_draft_model_path = draft_model_path
     server_args = ServerArgs.from_cli_args(raw_args)

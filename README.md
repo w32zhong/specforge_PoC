@@ -90,7 +90,7 @@ Useful options:
 For a demo of using SGLang as an inference engine for a model trained by this framework:
 ```sh
 # engine mode (single pass)
-CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py direct_mode \
+CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py engine_mode \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
     --dtype bfloat16 --disable_cuda_graph \
     --speculative_algorithm EAGLE # EAGLE-v2
@@ -126,9 +126,11 @@ source docker_utils.sh
 build specforge_het_and_sglang
 # run a detached container in the background
 HF_TOKEN=YOUR_TOKEN docker run -d \
-    --env HF_TOKEN=$HF_TOKEN --gpus all --ipc=host --ulimit memlock=-1 \
+    --env HF_TOKEN=$HF_TOKEN --gpus all --ipc=host \
     -v $HOME/.cache:/root/.cache -v `pwd`/nvim_plugins:/root/.local/share/nvim \
-    -v `pwd`:/workspace/mnt -it specforge_het_and_sglang /bin/bash
+    -v `pwd`:/workspace/mnt -v ~/.codex:/root/.codex \
+    -v /mnt/asus_card/hfdownloader:/workspace/hfdownloader \
+    -it specforge_het_and_sglang /bin/bash
 docker ps # find this active container
 docker exec -it <container name or ID> bash # attach to it
 ```

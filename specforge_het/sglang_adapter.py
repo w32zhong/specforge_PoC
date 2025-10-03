@@ -2,6 +2,13 @@ from transformers import AutoConfig
 from specforge_het.models import *
 from sglang.srt.models.registry import ModelRegistry
 
+# Calling tqdm.tqdm.set_lock(threading.RLock()) pre-populates _lock
+# with a plain thread lock, so that tqdm never uses the default
+# multiprocessing RLock which would be tracked by multiprocessing/resource_tracker.py
+# If we don't call this, you would get the “leaked semaphore” warning.
+import tqdm, threading
+tqdm.tqdm.set_lock(threading.RLock())
+
 
 for sgl_model in SGL_MODELS:
     ModelRegistry.models[sgl_model.__name__] = sgl_model

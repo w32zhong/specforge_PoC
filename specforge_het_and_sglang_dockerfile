@@ -40,3 +40,5 @@ RUN git clone --depth=1 -b v0.5.2 https://github.com/sgl-project/sglang.git && \
 # specforge_PoC
 RUN wget https://raw.githubusercontent.com/w32zhong/specforge_PoC/refs/heads/master/specforge_het/requirements.txt -O r.txt
 RUN bash -c "pip install -r <(grep -v -i '^transformers\b' r.txt)" # transformers version is up to SGLang
+# OpenAI codex
+RUN npm install -g @openai/codex
