@@ -39,7 +39,7 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
     return cnt_tokens
 
 
-def direct_mode(model_path, speculative_algorithm=None, dtype='auto',
+def engine_mode(model_path, speculative_algorithm=None, dtype='auto',
          speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
     questions = [
         "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
@@ -135,4 +135,4 @@ def server_mode():
 if __name__ == '__main__':
     import fire
     os.environ["PAGER"] = "cat"
-    fire.Fire(dict(direct_mode=direct_mode, server_mode=server_mode))
+    fire.Fire(dict(engine_mode=engine_mode, server_mode=server_mode))

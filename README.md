@@ -89,7 +89,7 @@ Useful options:
 ## SGLang Inference
 For a demo of using SGLang as an inference engine for a model trained by this framework:
 ```sh
-# direct mode
+# engine mode (single pass)
 CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py direct_mode \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
     --dtype bfloat16 --disable_cuda_graph \
