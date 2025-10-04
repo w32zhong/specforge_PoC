@@ -134,6 +134,7 @@ def run_one_example(llm, prompts, sampling_params, bs):
         print('max accept length:', max(token_nums))
         print('min accept length:', min(token_nums))
         print('avg accept length:', sum(token_nums) / len(token_nums))
+    return sum(token_nums) / time_cost
 
 
 def load_mtbench(filename):
@@ -227,10 +228,11 @@ def run_mtbench(llm, questions, sampling_params, num_threads):
     print()
     print('tokens and time:', token_nums, time_cost)
     print('e2e throughputs:', token_nums / time_cost)
+    return token_nums / time_cost
 
 
 def engine_mode(model_path, speculative_algorithm=None, dtype='auto', mtbench=None,
-                speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False):
+    speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False, outfile=None):
 
     base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
     engine_kwargs = dict(
@@ -271,7 +273,7 @@ def engine_mode(model_path, speculative_algorithm=None, dtype='auto', mtbench=No
             ) for Q in questions[:bs]
         ]
 
-        run_one_example(llm, prompts, sampling_params, bs)
+        throughputs = run_one_example(llm, prompts, sampling_params, bs)
 
     else:
         questions_jsonl, *after = mtbench.split(':')
@@ -279,7 +281,12 @@ def engine_mode(model_path, speculative_algorithm=None, dtype='auto', mtbench=No
         questions = load_mtbench(questions_jsonl)[: questions_num]
         bs = min(questions_num, bs)
 
-        run_mtbench(llm, questions, sampling_params, num_threads=bs)
+        throughputs = run_mtbench(llm, questions, sampling_params, num_threads=bs)
+
+    if outfile is not None:
+        with open(outfile, 'a') as fh:
+            j = json.dumps(dict(throughputs=throughputs, argv=sys.argv[2:]))
+            print(j, file=fh)
 
     llm._loop_runner.shutdown()
     llm.shutdown()
