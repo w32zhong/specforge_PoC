@@ -302,9 +302,10 @@ def server_mode():
     parser = argparse.ArgumentParser()
     ServerArgs.add_cli_args(parser)
     raw_args = parser.parse_args(sys.argv[2:]) # skip <script name> and <Fire mode>
-    base_model_path, draft_model_path = sgl_adapter.adapted(raw_args.model_path)
-    raw_args.model_path = base_model_path
-    raw_args.speculative_draft_model_path = draft_model_path
+    if raw_args.speculative_draft_model_path is None:
+        base_model_path, draft_model_path = sgl_adapter.adapted(raw_args.model_path)
+        raw_args.model_path = base_model_path
+        raw_args.speculative_draft_model_path = draft_model_path
     server_args = ServerArgs.from_cli_args(raw_args)
     try:
         launch_server(server_args)
