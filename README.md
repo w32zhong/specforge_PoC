@@ -95,9 +95,8 @@ CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py engine_mode \
     --dtype bfloat16 --disable_cuda_graph \
     --speculative_algorithm EAGLE # EAGLE-v2
 ```
-Since first-time running forward function would require compiling cache modules
-and it may take minutes!
-As a result, a fair inference time evaluation usually invokes the server mode:
+
+To run an official MT-Bench evaluation pipeline, use server mode:
 ```sh
 # server mode
 CUDA_VISIBLE_DEVICES=0 python ./demo_sglang_inference.py server_mode \
@@ -111,13 +110,25 @@ CUDA_VISIBLE_DEVICES=0 python ./demo_sglang_inference.py server_mode \
     # --disable-cuda-graph
     # --disable-radix-cache
 ```
-
-To run a quick MT-Bench evaluation, use the SGLang benchmark script:
 ```
 cd path/to/sglang/benchmark/mtbench
 wget -O question.jsonl https://raw.githubusercontent.com/lm-sys/FastChat/main/fastchat/llm_judge/data/mt_bench/question.jsonl
 python bench_sglang_eagle.py --parallel 1 --num-questions 10
 ```
+
+Alternatively, use engine mode to evaluate MT-Bench without running two commands:
+```sh
+python demo_sglang_inference.py engine_mode \
+    meta-llama/Llama-2-7b-chat-hf \
+    --draft_model lmsys/sglang-EAGLE-llama2-chat-7B \
+    --dtype bfloat16 --disable_cuda_graph \
+    --speculative_algorithm EAGLE --max_new_tokens None \
+    --log_level ERROR --mtbench question.jsonl --outfile out.log
+
+```
+(the example here is for evaluating `lmsys/sglang-EAGLE-llama2-chat-7B` which is
+the same checkpoint of original EAGLE-v2 paper but with config.json `architecture`
+field modified to indicate SGLang that we are using an EAGLE speculative draft model)
 
 Because SGLang is somewhat a complicated software stack and is hard to install,
 it is recommended to use a container build. In this case, a good workflow would be:
