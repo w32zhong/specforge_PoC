@@ -235,7 +235,7 @@ def run_mtbench(llm, questions, sampling_params, num_threads):
 def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     disable_cuda_graph=False, max_new_tokens=4096, temperature=0,
     speculative_algorithm=None, speculative_tree=(6, 10, 60),
-    mtbench=None, outfile=None):
+    mtbench=None, outfile=None, log_level="INFO"):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -248,6 +248,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         tp_size=tp_size,
         cuda_graph_max_bs=bs,
         disable_cuda_graph=disable_cuda_graph,
+        log_level=log_level,
 
         speculative_algorithm=speculative_algorithm,
         speculative_draft_model_path=draft_model_path,
