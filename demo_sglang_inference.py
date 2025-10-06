@@ -79,7 +79,7 @@ def stream_generate(llm, tokenizer, prompt, sampling_params):
         chunk_text = item["text"]
         cleaned_chunk = trim_overlap(text, chunk_text)
         text += cleaned_chunk
-        print(tokenizer.decode(item["output_ids"]), end="", flush=True)
+        print(tokenizer.decode(item["output_ids"]), end=" ", flush=True)
         acc_tokens.append(item["output_ids"])
 
     # Surface any exception from the background coroutine.
@@ -231,10 +231,16 @@ def run_mtbench(llm, questions, sampling_params, num_threads):
     return token_nums / time_cost
 
 
-def engine_mode(model_path, speculative_algorithm=None, dtype='auto', mtbench=None,
-    speculative_tree=(6, 10, 60), bs=1, tp_size=1, disable_cuda_graph=False, outfile=None):
+def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
+    disable_cuda_graph=False, max_new_tokens=4096, temperature=0,
+    speculative_algorithm=None, speculative_tree=(6, 10, 60),
+    mtbench=None, outfile=None):
 
-    base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
+    if draft_model is None:
+        base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
+    else:
+        base_model_path, draft_model_path = model_path, draft_model
+
     engine_kwargs = dict(
         model_path=base_model_path,
         dtype=dtype,
@@ -248,7 +254,7 @@ def engine_mode(model_path, speculative_algorithm=None, dtype='auto', mtbench=No
         speculative_eagle_topk=speculative_tree[1],
         speculative_num_draft_tokens=speculative_tree[2],
     )
-    sampling_params = {"temperature": 0, "max_new_tokens": 8000}
+    sampling_params = {"temperature": temperature, "max_new_tokens": max_new_tokens}
 
     llm = sgl.Engine(**engine_kwargs)
     llm._loop_runner = LoopRunner()
