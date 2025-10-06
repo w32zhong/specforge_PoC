@@ -35,7 +35,7 @@ for model_path in $MODEL_PATHS; do
       CUDA_VISIBLE_DEVICES=$dev flock grid_search_gpu${dev}.lock \
         python demo_sglang_inference.py engine_mode --bs $bs \
         --dtype bfloat16 --disable_cuda_graph --speculative_algorithm EAGLE \
-        --mtbench question.jsonl:10 --outfile ./grid_search_gpu${dev}.log \
+        --mtbench question.jsonl --outfile ./grid_search_gpu${dev}.log \
         -speculative_tree $tree $model_path &
       set +x
       let "cnt += 1"
