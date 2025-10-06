@@ -12,6 +12,10 @@ question = "Thomas is very healthy, but he has to go to the hospital every day. 
 
 def main(config_file='configs.ini', use_saved_json_config=None, **injects):
     configs = Configs.from_config_file(config_file, **injects)
+
+    # inference needs to keep base layers
+    configs.set_obj('modeling.free_base_layers', None)
+
     if use_saved_json_config:
         assert (isinstance(use_saved_json_config, str)
             and os.path.exists(use_saved_json_config))
