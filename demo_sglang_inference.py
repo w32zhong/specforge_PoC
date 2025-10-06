@@ -37,6 +37,11 @@ class LoopRunner:
         self._loop_ready.set()
         loop.run_forever()
 
+    def scheduler_internal_state(self, llm):
+        return self.submit(
+            llm.tokenizer_manager.get_internal_state()
+        ).result()[0]
+
     @property
     def loop(self):
         self._loop_ready.wait()
@@ -107,14 +112,14 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
     return batch_tokens, batch_texts 
 
 
-def run_one_example(llm, prompts, sampling_params, bs):
+def run_one_example(llm, prompts, sampling_params, bs, warm_up=True):
     tokenizer = llm.tokenizer_manager.tokenizer
 
-    # warm-up run
-    if bs > 1:
-        batch_generate(llm, tokenizer, prompts, sampling_params)
-    else:
-        stream_generate(llm, tokenizer, prompts[0], sampling_params)
+    if warm_up:
+        if bs > 1:
+            batch_generate(llm, tokenizer, prompts, sampling_params)
+        else:
+            stream_generate(llm, tokenizer, prompts[0], sampling_params)
 
     # timed run
     begin = time.perf_counter()
@@ -127,14 +132,18 @@ def run_one_example(llm, prompts, sampling_params, bs):
 
     print()
     token_nums = [len(t) for t in acc_tokens]
+    throughputs = sum(token_nums) / time_cost
     print(token_nums)
     print('tokens and time:', sum(token_nums), time_cost)
-    print('e2e throughputs:', sum(token_nums) / time_cost)
+    print('e2e throughputs:', throughputs)
     if bs == 1:
+        avg_spec_accept_length = sum(token_nums) / len(token_nums)
         print('max accept length:', max(token_nums))
         print('min accept length:', min(token_nums))
-        print('avg accept length:', sum(token_nums) / len(token_nums))
-    return sum(token_nums) / time_cost
+        print('avg accept length:', avg_spec_accept_length)
+    else:
+        avg_spec_accept_length = -1
+    return throughputs, avg_spec_accept_length
 
 
 def load_mtbench(filename):
@@ -235,7 +244,7 @@ def run_mtbench(llm, questions, sampling_params, num_threads):
 def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     disable_cuda_graph=False, max_new_tokens=4096, temperature=0,
     speculative_algorithm=None, speculative_tree=(6, 10, 60),
-    mtbench=None, outfile=None, log_level="INFO"):
+    mtbench=None, outfile=None, log_level="INFO", one_example_warmup=True):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -281,7 +290,8 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             ) for Q in questions[:bs]
         ]
 
-        throughputs = run_one_example(llm, prompts, sampling_params, bs)
+        throughputs, avg_spec_accept_length = run_one_example(
+            llm, prompts, sampling_params, bs, warm_up=one_example_warmup)
 
     else:
         questions_jsonl, *after = mtbench.split(':')
@@ -290,10 +300,21 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         bs = min(questions_num, bs)
 
         throughputs = run_mtbench(llm, questions, sampling_params, num_threads=bs)
+        avg_spec_accept_length = -1 # to be queried from SGLang scheduler
+
+    if avg_spec_accept_length < 0:
+        sis = llm._loop_runner.scheduler_internal_state(llm)
+        avg_spec_accept_length = sis['avg_spec_accept_length']
+
+    print('avg_spec_accept_length:', avg_spec_accept_length)
 
     if outfile is not None:
         with open(outfile, 'a') as fh:
-            j = json.dumps(dict(throughputs=throughputs, argv=sys.argv[2:]))
+            j = json.dumps(dict(
+                argv=sys.argv[2:],
+                throughputs=throughputs,
+                avg_spec_accept_length=avg_spec_accept_length,
+            ), sort_keys=True)
             print(j, file=fh)
 
     llm._loop_runner.shutdown()
