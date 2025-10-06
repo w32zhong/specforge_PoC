@@ -176,6 +176,7 @@ def monkey_patch_execute(self, origin_execute_fn, state, other):
         )
 
         name = other.name
+        self.text_ += text
         self.variables[name] = text
         self.meta_info[name] = tokens
         self.variable_event[name].set()
