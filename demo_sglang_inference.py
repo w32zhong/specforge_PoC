@@ -74,24 +74,25 @@ def stream_generate(llm, tokenizer, prompt, sampling_params):
     future = runner.submit(_stream_once())
 
     text = ""
-    acc_tokens = []
-    print([prompt])
+    meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
     while True:
         item = queue.get()
         if item is None:
             break
 
         chunk_text = item["text"]
+        chunk_meta_info = item["meta_info"]
         cleaned_chunk = trim_overlap(text, chunk_text)
         text += cleaned_chunk
         print(tokenizer.decode(item["output_ids"]), end=" ", flush=True)
-        acc_tokens.append(item["output_ids"])
+
+        meta_info['completion_tokens'] = chunk_meta_info['completion_tokens']
+        meta_info['spec_verify_ct'] += 1
+        meta_info['accept_tokens'].append(item["output_ids"])
 
     # Surface any exception from the background coroutine.
     future.result()
-    print()
-
-    return acc_tokens, text
+    return text, meta_info
 
 
 def batch_generate(llm, tokenizer, prompts, sampling_params):
@@ -101,49 +102,83 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
     runner = llm._loop_runner
     outputs = runner.submit(_batch_once()).result()
 
-    batch_tokens, batch_texts = [], []
+    batch_texts, batch_meta_info = [], []
     for prompt, output in zip(prompts, outputs):
-        print("===============================")
-        print([prompt])
-        print(output['text'])
-        tokens = tokenizer.encode(output["text"])
-        batch_tokens.append(tokens)
         batch_texts.append(output["text"])
-    return batch_tokens, batch_texts 
+        batch_meta_info.append(output['meta_info'])
+    return batch_texts, batch_meta_info
 
 
 def run_one_example(llm, prompts, sampling_params, bs, warm_up=True):
     tokenizer = llm.tokenizer_manager.tokenizer
 
     if warm_up:
-        if bs > 1:
-            batch_generate(llm, tokenizer, prompts, sampling_params)
-        else:
-            stream_generate(llm, tokenizer, prompts[0], sampling_params)
+        batch_generate(llm, tokenizer, prompts, sampling_params)
 
     # timed run
     begin = time.perf_counter()
     if bs > 1:
-        acc_tokens, _ = batch_generate(llm, tokenizer, prompts, sampling_params)
+        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
+        batch_texts, batch_meta_info = batch_generate(
+            llm, tokenizer, prompts, sampling_params
+        )
+        for prompt, text, mi in zip(prompts, batch_texts, batch_meta_info):
+            print('=' * 80)
+            print([prompt])
+            print(text)
+            meta_info['completion_tokens'] += mi['completion_tokens']
+            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
     else:
-        acc_tokens, _ = stream_generate(llm, tokenizer, prompts[0], sampling_params)
-        if acc_tokens: acc_tokens.pop(0)
+        print('=' * 80)
+        print(prompts)
+        _, meta_info = stream_generate(llm, tokenizer, prompts[0], sampling_params)
+        print()
+    print('-' * 80)
     time_cost = time.perf_counter() - begin
 
-    print()
-    token_nums = [len(t) for t in acc_tokens]
-    throughputs = sum(token_nums) / time_cost
-    print(token_nums)
-    print('tokens and time:', sum(token_nums), time_cost)
-    print('e2e throughputs:', throughputs)
-    if bs == 1:
-        avg_spec_accept_length = sum(token_nums) / len(token_nums)
-        print('max accept length:', max(token_nums))
-        print('min accept length:', min(token_nums))
-        print('avg accept length:', avg_spec_accept_length)
-    else:
-        avg_spec_accept_length = -1
-    return throughputs, avg_spec_accept_length
+    return meta_info, time_cost
+
+
+def run_mtbench(llm, questions, sampling_params, num_threads):
+    global_config.enable_precache_with_tracing = False
+    sgl.set_default_backend(MonkeyPatchLangBackend(llm))
+
+    #from sglang.lang.backend.runtime_endpoint import RuntimeEndpoint
+    #backend = RuntimeEndpoint('http://127.0.0.1:30000')
+    #sgl.set_default_backend(backend)
+
+    question_turns = [
+        {"question_1": q["turns"][0], "question_2": q["turns"][1]}
+        for q in questions
+    ]
+
+    begin = time.perf_counter()
+    res = answer_mt_bench.run_batch(
+        question_turns,
+        **sampling_params,
+        num_threads=num_threads,
+        progress_bar=True
+    )
+    time_cost = time.perf_counter() - begin
+
+    meta_info = dict(completion_tokens=0, spec_verify_ct=0)
+    for i, Q in enumerate(question_turns):
+        print('=' * 80)
+        print([Q['question_1']])
+        print(res[i].get_var('answer_1'))
+        mi = res[i].get_meta_info('answer_1')
+        meta_info['completion_tokens'] += mi['completion_tokens']
+        meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+
+        print('=' * 80)
+        print([Q['question_2']])
+        print(res[i].get_var('answer_2'))
+        mi = res[i].get_meta_info('answer_1')
+        meta_info['completion_tokens'] += mi['completion_tokens']
+        meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+    print('-' * 80)
+
+    return meta_info, time_cost
 
 
 def load_mtbench(filename):
@@ -160,16 +195,24 @@ class MonkeyPatchLangBackend(BaseBackend):
         super().__init__()
         self.monkey_patch_llm = llm
 
+        from sglang.lang.chat_template import get_chat_template_by_model_path
+        self.chat_template = get_chat_template_by_model_path(
+            'meta-llama/Llama-2-7b-chat-hf'
+        )
+
+    def get_chat_template(self):
+        return self.chat_template
+
     def generate(self, prompt, sampling_params):
         llm = self.monkey_patch_llm
         tokenizer = llm.tokenizer_manager.tokenizer
-        batch_tokens, batch_texts = batch_generate(
+        batch_texts, batch_meta_info = batch_generate(
             llm,
             tokenizer,
             [prompt],
             sampling_params.to_srt_kwargs(),
         )
-        return batch_tokens[0], batch_texts[0]
+        return batch_texts[0], batch_meta_info[0]
 
 
 def monkey_patch_execute(self, origin_execute_fn, state, other):
@@ -180,14 +223,14 @@ def monkey_patch_execute(self, origin_execute_fn, state, other):
         prompt = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
-        tokens, text = self.backend.generate(
-            prompt, sampling_params=self.default_sampling_para,
+        text, meta_info = self.backend.generate(
+            self.text_, sampling_params=self.default_sampling_para
         )
 
         name = other.name
         self.text_ += text
         self.variables[name] = text
-        self.meta_info[name] = tokens
+        self.meta_info[name] = meta_info
         self.variable_event[name].set()
 
     else:
@@ -202,49 +245,33 @@ def answer_mt_bench(s, question_1, question_2):
         s.stream_executor._execute,
         s
     )
+    s += sgl.system(
+        "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
+    )
     s += sgl.user(question_1)
     s += sgl.assistant(sgl.gen("answer_1"))
     s += sgl.user(question_2)
     s += sgl.assistant(sgl.gen("answer_2"))
 
 
-def run_mtbench(llm, questions, sampling_params, num_threads):
-    global_config.enable_precache_with_tracing = False
-    sgl.set_default_backend(MonkeyPatchLangBackend(llm))
-
-    question_turns = [
-        {"question_1": q["turns"][0], "question_2": q["turns"][1]}
-        for q in questions
-    ]
-
-    begin = time.perf_counter()
-    res = answer_mt_bench.run_batch(
-        question_turns,
-        **sampling_params,
-        num_threads=num_threads,
-        progress_bar=True
-    )
-    time_cost = time.perf_counter() - begin
-
-    token_nums = 0
-    for i, Q in enumerate(question_turns):
-        print([Q['question_1']])
-        print(res[i].get_var('answer_1'))
-        token_nums += len(res[i].get_meta_info('answer_1'))
-        print([Q['question_2']])
-        print(res[i].get_var('answer_2'))
-        token_nums += len(res[i].get_meta_info('answer_2'))
-
-    print()
-    print('tokens and time:', token_nums, time_cost)
-    print('e2e throughputs:', token_nums / time_cost)
-    return token_nums / time_cost
+def get_metrics(llm, meta_info, time_cost, d=3):
+    m = meta_info.copy()
+    sis = llm._loop_runner.scheduler_internal_state(llm)
+    m['scheduler_avg_accept_len'] = round(sis['avg_spec_accept_length'], d)
+    if accept_tokens := m.pop('accept_tokens', []):
+        m['accept_lens'] = [len(ac) for ac in accept_tokens]
+        m['accept_lens.sum'] = sum(m['accept_lens'])
+        m['accept_lens.max'] = max(m['accept_lens'])
+    m['avg_accept_len'] = round(m['completion_tokens'] / m['spec_verify_ct'], d)
+    m['time_cost'] = round(time_cost, 2)
+    m['throughputs'] = round(m['completion_tokens'] / time_cost, d)
+    return m
 
 
 def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     disable_cuda_graph=False, disable_radix_cache=True, max_new_tokens=None,
     temperature=0, speculative_algorithm=None, speculative_tree=(6, 10, 60),
-    mtbench=None, outfile=None, log_level="INFO", one_example_warmup=True):
+    mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -291,31 +318,26 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             ) for Q in questions[:bs]
         ]
 
-        throughputs, avg_spec_accept_length = run_one_example(
+        meta_info, time_cost = run_one_example(
             llm, prompts, sampling_params, bs, warm_up=one_example_warmup)
 
     else:
         questions_jsonl, *after = mtbench.split(':')
         questions_num = 80 if len(after) == 0 else int(after[0])
         questions = load_mtbench(questions_jsonl)[: questions_num]
-        bs = min(questions_num, bs)
+        meta_info, time_cost = run_mtbench(llm, questions, sampling_params,
+                                           num_threads=min(questions_num, bs))
 
-        throughputs = run_mtbench(llm, questions, sampling_params, num_threads=bs)
-        avg_spec_accept_length = -1 # to be queried from SGLang scheduler
-
-    if avg_spec_accept_length < 0:
-        sis = llm._loop_runner.scheduler_internal_state(llm)
-        avg_spec_accept_length = sis['avg_spec_accept_length']
-
-    print('avg_spec_accept_length:', avg_spec_accept_length)
+    metrics = get_metrics(llm, meta_info, time_cost)
+    for key, val in metrics.items():
+        print(f'{key:>30}:', val)
 
     if outfile is not None:
         with open(outfile, 'a') as fh:
             j = json.dumps(dict(
-                argv=sys.argv[2:],
-                throughputs=throughputs,
-                avg_spec_accept_length=avg_spec_accept_length,
-            ), sort_keys=True)
+                    argv=sys.argv[2:],
+                    **metrics
+                ), sort_keys=True)
             print(j, file=fh)
 
     llm._loop_runner.shutdown()
