@@ -242,8 +242,8 @@ def run_mtbench(llm, questions, sampling_params, num_threads):
 
 
 def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
-    disable_cuda_graph=False, max_new_tokens=4096, temperature=0,
-    speculative_algorithm=None, speculative_tree=(6, 10, 60),
+    disable_cuda_graph=False, disable_radix_cache=True, max_new_tokens=4096,
+    temperature=0, speculative_algorithm=None, speculative_tree=(6, 10, 60),
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=True):
 
     if draft_model is None:
@@ -257,6 +257,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         tp_size=tp_size,
         cuda_graph_max_bs=bs,
         disable_cuda_graph=disable_cuda_graph,
+        disable_radix_cache=disable_radix_cache,
         log_level=log_level,
 
         speculative_algorithm=speculative_algorithm,
