@@ -1,7 +1,7 @@
 # specforge PoC
 This is a Proof-of-Concept implementation for a speculative decoding framework that supports heterogeneous (het.) base and draft models.
 
-For a demo of what a heterogeneous speculative decoding model is, please check out a [demo here](./demo_concept.py).
+For a demo of what a heterogeneous speculative decoding model is, please check out a [demo here](./demo/concept.py).
 
 ## Setup
 ```
@@ -90,7 +90,7 @@ Useful options:
 For a demo of using SGLang as an inference engine for a model trained by this framework:
 ```sh
 # engine mode (single pass)
-CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py engine_mode \
+CUDA_VISIBLE_DEVICES=0 python -m demo.sglang_inference engine_mode \
     /mnt/asus_card/hfdownloader/w32zhong_deft-bee-66 \
     --dtype bfloat16 --disable_cuda_graph \
     --speculative_algorithm EAGLE # EAGLE-v2
@@ -99,7 +99,7 @@ CUDA_VISIBLE_DEVICES=0 python demo_sglang_inference.py engine_mode \
 To run an official MT-Bench evaluation pipeline, use server mode:
 ```sh
 # server mode
-CUDA_VISIBLE_DEVICES=0 python ./demo_sglang_inference.py server_mode \
+CUDA_VISIBLE_DEVICES=0 python -m demo.sglang_inference server_mode \
     --model output/deft-bee-66/ \
     --speculative-algo EAGLE \
     --speculative-num-steps 6 \
@@ -118,11 +118,11 @@ python bench_sglang_eagle.py --parallel 1 --num-questions 10
 
 Alternatively, use engine mode to evaluate MT-Bench without running two commands:
 ```sh
-python demo_sglang_inference.py engine_mode \
+CUDA_VISIBLE_DEVICES=0 python -m demo.sglang_inference engine_mode \
     meta-llama/Llama-2-7b-chat-hf \
     --draft_model lmsys/sglang-EAGLE-llama2-chat-7B \
     --dtype bfloat16 --disable_cuda_graph \
-    --speculative_algorithm EAGLE --max_new_tokens None \
+    --speculative_algorithm EAGLE --max_new_tokens 2048 \
     --log_level ERROR --mtbench question.jsonl --outfile out.log
 
 ```
