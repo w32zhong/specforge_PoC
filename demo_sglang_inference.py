@@ -173,7 +173,7 @@ def run_mtbench(llm, questions, sampling_params, num_threads):
         print('=' * 80)
         print([Q['question_2']])
         print(res[i].get_var('answer_2'))
-        mi = res[i].get_meta_info('answer_1')
+        mi = res[i].get_meta_info('answer_2')
         meta_info['completion_tokens'] += mi['completion_tokens']
         meta_info['spec_verify_ct'] += mi['spec_verify_ct']
     print('-' * 80)
