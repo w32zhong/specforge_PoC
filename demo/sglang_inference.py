@@ -286,6 +286,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         disable_cuda_graph=disable_cuda_graph,
         disable_radix_cache=disable_radix_cache,
         log_level=log_level,
+        watchdog_timeout=3600,
 
         speculative_algorithm=speculative_algorithm,
         speculative_draft_model_path=draft_model_path,
