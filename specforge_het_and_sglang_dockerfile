@@ -12,7 +12,7 @@ RUN bash -c "git clone https://github.com/t-k-cloud/tkarch.git && \
     pushd tkarch && cd dotfiles && ./overwrite.sh && \
     popd"
 # install python3.12
-RUN apt install -y zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev \
+RUN apt install -y zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev liblzma-dev \
     libssl-dev libsqlite3-dev libreadline-dev libffi-dev libbz2-dev pkg-config \
     && wget https://www.python.org/ftp/python/3.12.1/Python-3.12.1.tgz \
     && tar -xf Python-*.tgz && rm Python-*.tgz && cd Python-3.12.1 \
