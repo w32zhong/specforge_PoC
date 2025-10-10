@@ -3,9 +3,9 @@ import threading
 import time, json, os, sys, argparse
 from functools import partial
 from queue import Queue
+from transformers import AutoTokenizer
 
 import sglang as sgl
-from sglang.utils import trim_overlap
 from sglang.srt.server_args import ServerArgs
 from sglang.srt.entrypoints.http_server import launch_server
 from sglang.srt.utils import kill_process_tree
@@ -73,26 +73,24 @@ def stream_generate(llm, tokenizer, prompt, sampling_params):
     runner = llm._loop_runner
     future = runner.submit(_stream_once())
 
-    text = ""
+    output_ids = []
     meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
     while True:
-        item = queue.get()
-        if item is None:
+        chunk = queue.get()
+        if chunk is None:
             break
 
-        chunk_text = item["text"]
-        chunk_meta_info = item["meta_info"]
-        cleaned_chunk = trim_overlap(text, chunk_text)
-        text += cleaned_chunk
-        print(tokenizer.decode(item["output_ids"]), end=" ", flush=True)
-
-        meta_info['completion_tokens'] = chunk_meta_info['completion_tokens']
+        new_ids = chunk["output_ids"][len(output_ids):]
+        meta_info['completion_tokens'] = chunk["meta_info"]['completion_tokens']
         meta_info['spec_verify_ct'] += 1
-        meta_info['accept_tokens'].append(item["output_ids"])
+        meta_info['accept_tokens'].append(new_ids)
+        output_ids = chunk["output_ids"][:]
+
+        print(tokenizer.decode(new_ids), end=" ", flush=True)
 
     # Surface any exception from the background coroutine.
     future.result()
-    return text, meta_info
+    return tokenizer.decode(output_ids), meta_info
 
 
 def batch_generate(llm, tokenizer, prompts, sampling_params):
@@ -104,7 +102,8 @@ def batch_generate(llm, tokenizer, prompts, sampling_params):
 
     batch_texts, batch_meta_info = [], []
     for prompt, output in zip(prompts, outputs):
-        batch_texts.append(output["text"])
+        text = tokenizer.decode(output["output_ids"])
+        batch_texts.append(text)
         batch_meta_info.append(output['meta_info'])
     return batch_texts, batch_meta_info
 
@@ -271,7 +270,8 @@ def get_metrics(llm, meta_info, time_cost, d=3):
 def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     disable_cuda_graph=False, disable_radix_cache=True, max_new_tokens=None,
     temperature=0, speculative_algorithm=None, speculative_tree=(6, 10, 60),
-    mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False):
+    mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
+    skip_tokenizer_init=True):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -288,6 +288,9 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         log_level=log_level,
         watchdog_timeout=3600,
 
+        # manually set tokenizer to avoid any unexpected default options
+        skip_tokenizer_init=skip_tokenizer_init,
+
         speculative_algorithm=speculative_algorithm,
         speculative_draft_model_path=draft_model_path,
         speculative_num_steps=speculative_tree[0],
@@ -297,7 +300,11 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     sampling_params = {"temperature": temperature, "max_new_tokens": max_new_tokens}
 
     llm = sgl.Engine(**engine_kwargs)
+    if skip_tokenizer_init:
+        llm.tokenizer_manager.tokenizer = AutoTokenizer.from_pretrained(base_model_path,
+            add_bos_token=False, add_eos_token=False, trust_remote_code=True)
     llm._loop_runner = LoopRunner()
+
     if mtbench is None:
         questions = [
             "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?",
