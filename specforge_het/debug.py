@@ -10,13 +10,6 @@ def count(d):
     return g_count
 
 
-def tensor_hash(t):
-    t = t.double().cpu().numpy()
-    N = t.shape[-1]
-    w = np.array(range(1, N+1), dtype=t.dtype)
-    return t @ w
-
-
 def cmp_tensor_w_another(tensor):
     import torch
     try:
@@ -43,15 +36,16 @@ def hook_fn(model, tokenizer, path, module, inputs, output):
         inputs = inputs[0] if isinstance(inputs, tuple) else inputs
         print(path, output.shape)
         if 'embed_tokens' in path:
-            print([tokenizer.decode(t) for t in inputs[0]])
-            print('INP:', inputs.long().cpu().numpy()[-40:])
+            if tokenizer:
+                print([tokenizer.decode(t) for t in inputs[0]])
+            print('INP:', inputs)
         else:
-            print('INP:', tensor_hash(inputs[0])[-40:])
-        print('OUT:', tensor_hash(output[0])[-40:])
+            print('INP:', inputs.sum(-1))
+        print('OUT:', output.sum(-1))
         print('\n')
 
 
-def hook_model(tokenizer, model):
+def hook_model(model, tokenizer=None):
     for path, module in model.named_modules():
         module.register_forward_hook(
             partial(hook_fn, model, tokenizer, path)
