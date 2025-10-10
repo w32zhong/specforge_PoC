@@ -4,6 +4,7 @@ import time, json, os, sys, argparse
 from functools import partial
 from queue import Queue
 from transformers import AutoTokenizer
+from colorama import Fore, Style
 
 import sglang as sgl
 from sglang.srt.server_args import ServerArgs
@@ -288,7 +289,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         log_level=log_level,
         watchdog_timeout=3600,
 
-        # manually set tokenizer to avoid any unexpected default options
+        # manually set tokenizer to avoid unexpected behaviours such as `add_bos_token`:
         skip_tokenizer_init=skip_tokenizer_init,
 
         mem_fraction_static=mem_fraction_static,
@@ -303,10 +304,24 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     sampling_params = {"temperature": temperature, "max_new_tokens": max_new_tokens}
 
     llm = sgl.Engine(**engine_kwargs)
+    llm._loop_runner = LoopRunner()
+
     if skip_tokenizer_init:
         llm.tokenizer_manager.tokenizer = AutoTokenizer.from_pretrained(base_model_path,
             add_bos_token=False, add_eos_token=False, trust_remote_code=True)
-    llm._loop_runner = LoopRunner()
+
+    # Testing tokenizer template
+    test_messages = [
+        {"role": "system", "content": "You are a friendly chatbot!"},
+        {"role": "user", "content": "Hello, how are you?"},
+        {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
+        {"role": "user", "content": "I'd like to show off how chat templating works!"},
+    ]
+    tokenizer = llm.tokenizer_manager.tokenizer
+    test_prompt = tokenizer.apply_chat_template(test_messages, tokenize=False)
+    print('[chat template]', Fore.YELLOW, '\n' + test_prompt, Style.RESET_ALL)
+    test_prompt_encoded = tokenizer.encode(test_prompt)
+    print('[encode-decode]', Fore.RED, [tokenizer.decode(test_prompt_encoded)], Style.RESET_ALL)
 
     if mtbench is None:
         questions = [

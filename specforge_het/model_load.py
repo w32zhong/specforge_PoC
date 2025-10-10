@@ -155,6 +155,8 @@ def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
     ]
     test_prompt = tokenizer.apply_chat_template(test_messages, tokenize=False)
     master_print('[chat template]', Fore.YELLOW, '\n' + test_prompt, Style.RESET_ALL)
+    test_prompt_encoded = tokenizer.encode(test_prompt)
+    master_print('[encode-decode]', Fore.RED, [tokenizer.decode(test_prompt_encoded)], Style.RESET_ALL)
 
     if use_deepspeed:
         device_map = None # the model will only contain "meta weights" if use_deepspeed
