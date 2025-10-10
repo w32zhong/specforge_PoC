@@ -7,10 +7,13 @@ RUN apt update && apt install -y build-essential git tmux ncdu vim npm curl wget
 RUN apt-get install -y locales && \
     sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && \
     locale-gen
-# setup dotfiles
-RUN bash -c "git clone https://github.com/t-k-cloud/tkarch.git && \
-    pushd tkarch && cd dotfiles && ./overwrite.sh && \
-    popd"
+# install nvim
+RUN apt install -y cmake && git clone --depth 1 -b v0.11.4 https://github.com/neovim/neovim && \
+    cd neovim && make CMAKE_BUILD_TYPE=Release && make install && cd .. && rm -rf neovim
+# install node and Python LSP
+RUN wget https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh && \
+    bash install.sh && bash -c 'source ~/.nvm/nvm.sh && nvm install v24.5.0' && rm install.sh
+RUN npm install -g pyright
 # install python3.12
 RUN apt install -y zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev liblzma-dev \
     libssl-dev libsqlite3-dev libreadline-dev libffi-dev libbz2-dev pkg-config \
@@ -23,13 +26,12 @@ RUN wget https://bootstrap.pypa.io/get-pip.py \
 # install python utilities
 RUN python -m pip install --no-cache-dir --upgrade \
     pip setuptools nvitop fire packaging
-# install nvim
-RUN apt install -y cmake && git clone --depth 1 -b v0.11.4 https://github.com/neovim/neovim && \
-    cd neovim && make CMAKE_BUILD_TYPE=Release && make install && cd .. && rm -rf neovim
-# install node and Python LSP
-RUN wget https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh && \
-    bash install.sh && bash -c 'source ~/.nvm/nvm.sh && nvm install v24.5.0' && rm install.sh
-RUN npm install -g pyright
+# rpdb
+RUN apt install -y rlwrap socat && pip install rpdb
+# setup dotfiles
+RUN bash -c "git clone https://github.com/t-k-cloud/tkarch.git && \
+    pushd tkarch && cd dotfiles && ./overwrite.sh && \
+    popd"
 # OpenAI codex
 RUN npm install -g @openai/codex
 ########################## FINISH BASE ENVIRONMENT BUILD #####################################
@@ -40,5 +42,3 @@ RUN git clone --depth=1 -b v0.5.2 https://github.com/sgl-project/sglang.git && \
 # specforge_PoC
 RUN wget https://raw.githubusercontent.com/w32zhong/specforge_PoC/refs/heads/master/specforge_het/requirements.txt -O r.txt
 RUN bash -c "pip install -r <(grep -v -i '^transformers\b' r.txt)" # transformers version is up to SGLang
-# rpdb
-RUN apt install -y rlwrap socat && pip install rpdb
