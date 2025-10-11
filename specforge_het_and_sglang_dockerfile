@@ -37,18 +37,19 @@ RUN git clone --depth=1 -b v0.5.3 https://github.com/sgl-project/sglang.git \
     && pip install --break-system-packages -e ".[default]"
 # FlashInfer
 RUN pip install --break-system-packages build nvidia-nvshmem-cu12 \
-    && git clone --depth=1 -b v0.4.0 https://github.com/flashinfer-ai/flashinfer.git \
+    && git clone --depth=1 -b v0.4.0rc0 https://github.com/flashinfer-ai/flashinfer.git \
     && cd flashinfer && git submodule update --init --recursive \
     && python -m pip install --no-build-isolation -e . --break-system-packages
 # sgl-kernel
 ADD ./scripts/sgl_kernel/CMakeLists.txt sglang/sgl-kernel/
-ADD ./scripts/flash_attn/pytorch_extension_utils.h sglang/sgl-kernel/include/
+ADD ./scripts/sgl_kernel/common_extension.cc sglang/sgl-kernel/csrc/
 RUN cd sglang/sgl-kernel && PIP_BREAK_SYSTEM_PACKAGES=1 make install-deps \
+    && pip install "apache-tvm-ffi==0.1.0b15" --break-system-packages \
     && Torch_DIR=$(python -c 'import torch, os; print(os.path.dirname(torch.__file__) + "/share/cmake/Torch")') \
     cmake --fresh -S . -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DFLASHINFER_DIR=/workspace/flashinfer -DTORCH_CUDA_ARCH_LIST=8.9 \
-    && ninja -C build -j 8 -v && python -m build --wheel --no-isolation --verbose -Cbuild-dir=build . \
-RUN cd sglang/sgl-kernel && pip install dist/*whl --force-reinstall --no-deps
+    && python -m build --wheel --no-isolation --verbose -Cbuild-dir=build . \
+    && pip install dist/*whl --force-reinstall --no-deps --break-system-packages
 # specforge_PoC
 RUN wget https://raw.githubusercontent.com/w32zhong/specforge_PoC/refs/heads/master/specforge_het/requirements.txt -O r.txt \
     && bash -c "pip install -r <(grep -v '^transformers\b' r.txt) --break-system-packages"
