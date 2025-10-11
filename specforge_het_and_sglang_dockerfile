@@ -1,44 +1,58 @@
-FROM nvcr.io/nvidia/cuda:12.9.1-cudnn-devel-ubuntu20.04
+FROM nvcr.io/nvidia/cuda:12.9.1-cudnn-devel-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /workspace
 # install utilities
-RUN apt update && apt install -y build-essential git tmux ncdu vim npm curl wget
+RUN apt update && apt install -y build-essential git tmux ncdu vim npm curl wget cmake
 # ensure UTF-8 locale is generated
-RUN apt-get install -y locales && \
+RUN apt install -y locales && \
     sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && \
     locale-gen
 # install nvim
-RUN apt install -y cmake && git clone --depth 1 -b v0.11.4 https://github.com/neovim/neovim && \
+RUN git clone --depth 1 -b v0.11.4 https://github.com/neovim/neovim && \
     cd neovim && make CMAKE_BUILD_TYPE=Release && make install && cd .. && rm -rf neovim
 # install node and Python LSP
 RUN wget https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh && \
     bash install.sh && bash -c 'source ~/.nvm/nvm.sh && nvm install v24.5.0' && rm install.sh
 RUN npm install -g pyright
-# install python3.12
-RUN apt install -y zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev liblzma-dev \
-    libssl-dev libsqlite3-dev libreadline-dev libffi-dev libbz2-dev pkg-config \
-    && wget https://www.python.org/ftp/python/3.12.1/Python-3.12.1.tgz \
-    && tar -xf Python-*.tgz && rm Python-*.tgz && cd Python-3.12.1 \
-    && ./configure --enable-optimizations && make install
-RUN wget https://bootstrap.pypa.io/get-pip.py \
-    && python3 get-pip.py && rm get-pip.py \
-    && ln -sf /usr/local/bin/python3 /usr/bin/python
+# python3.12
+RUN apt install -y python3-pip && ln -sf `which python3` /usr/bin/python
 # install python utilities
-RUN python -m pip install --no-cache-dir --upgrade \
-    pip setuptools nvitop fire packaging
+RUN python -m pip install --break-system-packages --upgrade \
+    setuptools nvitop fire packaging
 # rpdb
-RUN apt install -y rlwrap socat && pip install rpdb
+RUN apt install -y rlwrap socat && pip install --break-system-packages rpdb
 # setup dotfiles
-RUN bash -c "git clone https://github.com/t-k-cloud/tkarch.git && \
-    pushd tkarch && cd dotfiles && ./overwrite.sh && \
-    popd"
+RUN git clone https://github.com/t-k-cloud/tkarch.git && rm -rf .config/ \
+    && bash -c "pushd tkarch && cd dotfiles && ./overwrite.sh && popd"
 # OpenAI codex
 RUN npm install -g @openai/codex
 ########################## FINISH BASE ENVIRONMENT BUILD #####################################
-# sglang
+# PyTorch
+RUN pip install --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cu129
+# FlashInfer
+RUN pip install --break-system-packages build nvidia-nvshmem-cu12 \
+    && git clone --depth=1 -b v0.4.0rc3 https://github.com/flashinfer-ai/flashinfer.git \
+    && cd flashinfer && git submodule update --init --recursive \
+    && python -m pip install --no-build-isolation -e . --break-system-packages
+# SGLang
 RUN apt install -y libnuma1 libnuma-dev # some missing system libs
-RUN git clone --depth=1 -b v0.5.2 https://github.com/sgl-project/sglang.git && \
-    cd sglang/python && pip install . && pip install ".[srt]" # SGLang Run Time
+RUN git clone --depth=1 -b v0.5.3 https://github.com/sgl-project/sglang.git \
+    && cd sglang/python && mv pyproject.toml bkup.toml \
+    && bash -c 'grep -vE "torch|flashinfer|sgl-kernel|transformers" bkup.toml > pyproject.toml' \
+    && pip install --break-system-packages -e ".[default]" \
+    && pip install --break-system-packages "torchao==0.9.0" \
+# SGL-Kernel (patched and trimmed minimal version)
+ADD ./sgl_kernel_patch/CMakeLists.txt sglang/sgl-kernel/
+ADD ./sgl_kernel_patch/common_extension.cc sglang/sgl-kernel/csrc/
+RUN cd sglang/sgl-kernel && PIP_BREAK_SYSTEM_PACKAGES=1 make install-deps \
+    && Torch_DIR=$(python -c 'import torch, os; print(os.path.dirname(torch.__file__) + "/share/cmake/Torch")') \
+    cmake --fresh -S . -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DFLASHINFER_DIR=/workspace/flashinfer -DTORCH_CUDA_ARCH_LIST=8.9 \
+    && python -m build --wheel --no-isolation --verbose -Cbuild-dir=build -C--build-option=-j4 . \
+    && pip install dist/*whl --force-reinstall --no-deps --break-system-packages
 # specforge_PoC
-RUN wget https://raw.githubusercontent.com/w32zhong/specforge_PoC/refs/heads/master/specforge_het/requirements.txt -O r.txt
-RUN bash -c "pip install -r <(grep -v -i '^transformers\b' r.txt)" # transformers version is up to SGLang
+RUN wget https://raw.githubusercontent.com/w32zhong/specforge_PoC/refs/heads/master/specforge_het/requirements.txt -O r.txt \
+    && bash -c "pip install -r <(grep -v '^transformers\b' r.txt) --break-system-packages" && rm r.txt
+# Huggingface Transformers
+RUN git clone --depth=1 -b v4.56.1 https://github.com/huggingface/transformers.git \
+    && cd transformers && pip uninstall -y transformers && pip install -e ".[torch]" --break-system-packages
