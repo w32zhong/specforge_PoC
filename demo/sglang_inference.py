@@ -272,7 +272,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     disable_cuda_graph=False, disable_radix_cache=True, max_new_tokens=None,
     temperature=0, speculative_algorithm=None, speculative_tree=(6, 10, 60),
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
-    skip_tokenizer_init=True, mem_fraction_static=0.7):
+    skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -288,6 +288,8 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         disable_radix_cache=disable_radix_cache,
         log_level=log_level,
         watchdog_timeout=3600,
+        enable_deterministic_inference=batch_invariant,
+        attention_backend='flashinfer',
 
         # manually set tokenizer to avoid unexpected behaviours such as `add_bos_token`:
         skip_tokenizer_init=skip_tokenizer_init,
