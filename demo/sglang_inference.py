@@ -95,12 +95,12 @@ class LoopRunner:
         outputs = self.submit(_batch_once()).result()
 
         tokenizer = llm.tokenizer_manager.tokenizer
-        batch_texts, batch_meta_info = [], []
+        batch_new_text, batch_meta_info = [], []
         for prompt, output in zip(prompts, outputs):
-            text = tokenizer.decode(output["output_ids"])
-            batch_texts.append(text)
+            new_text = tokenizer.decode(output["output_ids"])
+            batch_new_text.append(new_text)
             batch_meta_info.append(output['meta_info'])
-        return batch_texts, batch_meta_info
+        return batch_new_text, batch_meta_info
 
 
 def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True):
@@ -111,13 +111,13 @@ def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True
     begin = time.perf_counter()
     if bs > 1:
         meta_info = dict(completion_tokens=0, spec_verify_ct=0)
-        batch_texts, batch_meta_info = loop_runner.batch_generate(
+        batch_new_text, batch_meta_info = loop_runner.batch_generate(
             llm, prompts, sampling_params
         )
-        for prompt, text, mi in zip(prompts, batch_texts, batch_meta_info):
+        for prompt, new_text, mi in zip(prompts, batch_new_text, batch_meta_info):
             print('=' * 80)
             print([prompt])
-            print(text)
+            print(new_text)
             meta_info['completion_tokens'] += mi['completion_tokens']
             meta_info['spec_verify_ct'] += mi['spec_verify_ct']
     else:
@@ -126,12 +126,11 @@ def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True
         _, meta_info = loop_runner.stream_generate(llm, prompts[0], sampling_params)
         print()
     print('-' * 80)
-    time_cost = time.perf_counter() - begin
+    meta_info['time_cost'] = time.perf_counter() - begin
+    return meta_info
 
-    return meta_info, time_cost
 
-
-def calc_metrics(llm, loop_runner, meta_info, time_cost, d=3):
+def calc_metrics(llm, loop_runner, meta_info, d=3):
     m = meta_info.copy()
     sis = loop_runner.scheduler_internal_state(llm)
     m['scheduler_avg_accept_len'] = round(sis['avg_spec_accept_length'], d)
@@ -140,8 +139,8 @@ def calc_metrics(llm, loop_runner, meta_info, time_cost, d=3):
         m['accept_lens.sum'] = sum(m['accept_lens'])
         m['accept_lens.max'] = max(m['accept_lens'])
     m['avg_accept_len'] = round(m['completion_tokens'] / m['spec_verify_ct'], d)
-    m['time_cost'] = round(time_cost, 2)
-    m['throughputs'] = round(m['completion_tokens'] / time_cost, d)
+    m['throughputs'] = round(m['completion_tokens'] / m['time_cost'], d)
+    m['time_cost'] = round(m['time_cost'], 2)
     return m
 
 
@@ -227,7 +226,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             ) for Q in questions[:bs]
         ]
 
-        meta_info, time_cost = run_one_example(
+        meta_info = run_one_example(
             llm, loop_runner, prompts, sampling_params, bs, warm_up=one_example_warmup)
 
     else:
@@ -238,23 +237,24 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
                 prompt = tokenizer.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=True
                 )
-            batch_texts, batch_meta_info = loop_runner.batch_generate(
+            batch_new_text, batch_meta_info = loop_runner.batch_generate(
                 llm, [prompt], sampling_params
             )
             print('=' * 80)
             print([prompt])
-            print(batch_texts[0])
+            print(batch_new_text[0])
             print('-' * 80)
-            return batch_texts[0], batch_meta_info[0]
+            return batch_new_text[0], batch_meta_info[0]
+
+        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
 
         begin = time.perf_counter()
         res = run_mtbench(callbk, llm, mtbench, sampling_params,
                           sys_prompt=sys_prompt_lib[sys_prompt],
                           sgl_chat_template=mtbench_use_sgl_chat_template,
                           num_threads=bs)
-        time_cost = time.perf_counter() - begin
+        meta_info['time_cost'] = time.perf_counter() - begin
 
-        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
         for i, res in enumerate(res):
             #print(res.get_var('answer_1'))
             mi = res.get_meta_info('answer_1')
@@ -266,7 +266,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             meta_info['completion_tokens'] += mi['completion_tokens']
             meta_info['spec_verify_ct'] += mi['spec_verify_ct']
 
-    metrics = calc_metrics(llm, loop_runner, meta_info, time_cost)
+    metrics = calc_metrics(llm, loop_runner, meta_info)
     for key, val in metrics.items():
         print(f'{key:>30}:', val)
 

@@ -98,7 +98,7 @@ def money_patch_sgl_function_state(s):
 # Evaluation via SGLang frontend
 #################################
 @sgl.function
-def answer_mt_bench(s, sys_prompt, question_1, question_2):
+def answer_mtbench_question(s, sys_prompt, question_1, question_2):
     money_patch_sgl_function_state(s)
     if sys_prompt:
         s += sgl.system(sys_prompt)
@@ -139,7 +139,7 @@ def run_mtbench(backend, model, data_source, sampling_params,
         for q in questions
     ]
 
-    return answer_mt_bench.run_batch(
+    return answer_mtbench_question.run_batch(
         question_turns,
         **sampling_params,
         num_threads=num_threads,

@@ -5,12 +5,70 @@ from specforge_het.configs import Configs
 from specforge_het.model_load import load_models
 from specforge_het.specforge_lm import is_speculative_model
 
-sys_instructions = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
+from specforge_het.sglang_adapter_utils import run_mtbench
+from specforge_het.sys_prompts import sys_prompt_lib
 
-question = "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?"
+
+def generate(model, inputs):
+    tokenizer = model.tokenizer
+    print(tokenizer.batch_decode(inputs.input_ids), end='\n', flush=True)
+    meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
+    with torch.no_grad():
+        if is_speculative_model(model):
+            eos = tokenizer.eos_token_id
+            new_tokens = []
+            for tokens in model.speculative_generate(**inputs):
+                eos_pos = (tokens == eos).nonzero()
+                accept_tokens = (tokens[0] if eos_pos.numel() == 0
+                                 else tokens[0, :eos_pos[0,1]]).tolist()
+                print(tokenizer.decode(accept_tokens), end=' ', flush=True)
+                new_tokens += accept_tokens
+
+                if eos_pos.numel() > 0:
+                    break
+                elif len(new_tokens) >= model.inference_configs.max_new_tokens:
+                    break
+
+                meta_info['completion_tokens'] += len(accept_tokens)
+
+                meta_info['spec_verify_ct'] += 1
+                meta_info['accept_tokens'].append(accept_tokens)
+
+            new_text = tokenizer.decode(new_tokens)
+
+        else:
+            from transformers import GenerationConfig, TextStreamer
+            generation_config = GenerationConfig.from_pretrained(
+                configs.modeling.model_path,
+                do_sample=False,
+                max_new_tokens=model.inference_configs.max_new_tokens
+            )
+            generated = model.generate(**inputs,
+                generation_config=generation_config,
+                streamer=TextStreamer(tokenizer),
+            )
+            meta_info['completion_tokens'] += len(generated[0])
+            new_text = tokenizer.decode(generated[0])
+
+    return new_text, meta_info
 
 
-def main(config_file='configs.ini', use_saved_json_config=None, **injects):
+def calc_metrics(meta_info, d=3):
+    m = meta_info.copy()
+    if accept_tokens := m.pop('accept_tokens', []):
+        m['accept_lens'] = [len(ac) for ac in accept_tokens]
+        m['accept_lens.sum'] = sum(m['accept_lens'])
+        m['accept_lens.max'] = max(m['accept_lens'])
+    if m['spec_verify_ct'] > 0:
+        m['avg_accept_len'] = round(m['completion_tokens'] / m['spec_verify_ct'], d)
+    m['throughputs'] = round(m['completion_tokens'] / m['time_cost'], d)
+    m['time_cost'] = round(m['time_cost'], 2)
+    return m
+
+
+def main(config_file='configs.ini', use_saved_json_config=None, sys_prompt=None,
+         mtbench=None, mtbench_use_sgl_chat_template=False, outfile=None, **injects):
+
     configs = Configs.from_config_file(config_file, **injects)
 
     # inference needs to keep base layers
@@ -26,69 +84,66 @@ def main(config_file='configs.ini', use_saved_json_config=None, **injects):
         )
 
     tokenizer, model = load_models(configs.modeling)
-
     model.eval()
     model.tokenizer = tokenizer
     model.inference_configs = configs.inference
 
-    test_messages = [
-        #{"role": "system", "content": sys_instructions},
-        {"role": "user", "content": question},
-    ]
-    test_prompt = tokenizer.apply_chat_template(test_messages, tokenize=False, add_generation_prompt=True)
-    test_inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
+    begin = time.perf_counter()
+    if mtbench:
+        def callbk(model, sgl_prompt, messages, _):
+            if mtbench_use_sgl_chat_template:
+                prompt = sgl_prompt
+            else:
+                prompt = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            new_text, meta_info = generate(model, inputs)
+            return new_text, meta_info
 
-    start_time = time.perf_counter()
+        res = run_mtbench(callbk, model, mtbench, sampling_params={},
+                          sys_prompt=sys_prompt_lib[sys_prompt],
+                          sgl_chat_template=mtbench_use_sgl_chat_template,
+                          num_threads=1)
 
-    new_tokens = 0
-    print(tokenizer.batch_decode(test_inputs.input_ids), end='\n', flush=True)
-    with torch.no_grad():
-        if is_speculative_model(model):
-            eos = tokenizer.eos_token_id
-            accept_length, iter_cost = [], []
-            start_iter_time = time.perf_counter()
-            for tokens in model.speculative_generate(**test_inputs):
-                eos_pos = (tokens == eos).nonzero()
-                accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
-                new_tokens += len(accept_tokens)
-                print(tokenizer.decode(accept_tokens), end=' ', flush=True)
-                if eos_pos.numel() > 0:
-                    break
-                elif new_tokens >= configs.inference.max_new_tokens:
-                    break
-                accept_length.append(len(accept_tokens))
-                iter_cost.append(time.perf_counter() - start_iter_time)
-                start_iter_time = time.perf_counter()
-            print('\n')
-            accept_length.pop(0) # exclude pre-fill
-            prefill_cost = iter_cost.pop(0)
-            n_iters = len(iter_cost)
+        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
+        for i, res in enumerate(res):
+            mi = res.get_meta_info('answer_1')
+            meta_info['completion_tokens'] += mi['completion_tokens']
+            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
 
-            print(accept_length)
-            print('prefilling cost:', round(prefill_cost, 3))
-            print('decoding cost:', round(sum(iter_cost) / n_iters, 3))
-            print('max accept_length:', max(accept_length))
-            print('min accept_length:', min(accept_length))
-            print('avg accept_length:', round(sum(accept_length) / n_iters, 3))
-        else:
-            from transformers import GenerationConfig, TextStreamer
-            generation_config = GenerationConfig.from_pretrained(
-                configs.modeling.model_path,
-                do_sample=False,
-                max_new_tokens=model.inference_configs.max_new_tokens
-            )
-            generated = model.generate(**test_inputs,
-                generation_config=generation_config,
-                streamer=TextStreamer(tokenizer),
-            )
-            print('\n')
-            new_tokens = len(generated[0])
+            mi = res.get_meta_info('answer_2')
+            meta_info['completion_tokens'] += mi['completion_tokens']
+            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
 
-    seconds = time.perf_counter() - start_time
-    print('num output tokens:', new_tokens, f'in {seconds} sec')
-    print('tokens per second:', round(new_tokens / seconds, 3))
+    else:
+        # one-shot example
+        question = "Thomas is very healthy, but he has to go to the hospital every day. What could be the reasons?"
+        test_messages = list(filter(lambda c: c["content"], [
+            {"role": "system", "content": sys_prompt_lib[sys_prompt]},
+            {"role": "user", "content": question},
+        ]))
+        test_prompt = tokenizer.apply_chat_template(test_messages,
+                        tokenize=False, add_generation_prompt=True)
+        test_inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
+        _, meta_info = generate(model, test_inputs)
+
+    meta_info['time_cost'] = time.perf_counter() - begin
+    metrics = calc_metrics(meta_info)
+
+    for key, val in metrics.items():
+        print(f'{key:>30}:', val)
+
+    if outfile is not None:
+        with open(outfile, 'a') as fh:
+            j = json.dumps(dict(
+                    argv=sys.argv[1:],
+                    **metrics
+                ), sort_keys=True)
+            print(j, file=fh)
 
 
 if __name__ == '__main__':
     import fire
+    os.environ["PAGER"] = "cat"
     fire.Fire(main)
