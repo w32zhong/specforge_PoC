@@ -43,13 +43,15 @@ RUN git clone --depth=1 -b v0.5.3 https://github.com/sgl-project/sglang.git \
     && pip install --config-settings editable-mode=compat -e ".[default]" \
     && pip install "torchao==0.9.0"
 # SGL-Kernel (patched and trimmed minimal version)
+ARG CUDA_ARCH_LIST
+RUN test -n "$CUDA_ARCH_LIST"
 ADD ./sgl_kernel_patch/CMakeLists.txt sglang/sgl-kernel/
 ADD ./sgl_kernel_patch/common_extension.cc sglang/sgl-kernel/csrc/
 RUN cd sglang/sgl-kernel && PIP_BREAK_SYSTEM_PACKAGES=1 make install-deps \
     && pip install "apache-tvm-ffi==0.1.0b15" \
     && Torch_DIR=$(python -c 'import torch, os; print(os.path.dirname(torch.__file__) + "/share/cmake/Torch")') \
     cmake --fresh -S . -B build -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release -DFLASHINFER_DIR=/workspace/flashinfer -DTORCH_CUDA_ARCH_LIST=8.9 \
+    -DCMAKE_BUILD_TYPE=Release -DFLASHINFER_DIR=/workspace/flashinfer -DTORCH_CUDA_ARCH_LIST="$CUDA_ARCH_LIST" \
     && python -m build --wheel --no-isolation --verbose -Cbuild-dir=build . \
     && pip install dist/*whl --force-reinstall --no-deps
 # specforge_PoC
