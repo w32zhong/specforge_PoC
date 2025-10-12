@@ -3,6 +3,9 @@ from colorama import Fore, Style
 from specforge_het.models import *
 
 
+#################################
+# SGLang speculative model mixin
+#################################
 class SGLangAdapterMixin:
     def bind_adapter(self, config):
         # move and store base model config
@@ -36,58 +39,48 @@ class SGLangAdapterMixin:
         return weights
 
 
-################################
+############################
 # SGLang frontend utilities
-################################
+############################
+
+from functools import partial
+from transformers import AutoTokenizer
 
 import sglang as sgl
 from sglang.lang.backend.runtime_endpoint import RuntimeEndpoint
 from sglang.lang.backend.base_backend import BaseBackend
+from sglang.lang.chat_template import get_chat_template
 from sglang.global_config import global_config
 from sglang.lang.ir import SglGen
 
 
-class MonkeyPatchLangBackend(BaseBackend):
-    def __init__(self, llm):
+class CallbackBackend(BaseBackend):
+    def __init__(self, callbk, model, sgl_chat_template=None):
         super().__init__()
-        self.monkey_patch_llm = llm
-
-        from sglang.lang.chat_template import get_chat_template_by_model_path
-        self.chat_template = get_chat_template_by_model_path(
-            #'meta-llama/Llama-2-7b-chat-hf'
-            'Qwen/Qwen3-4B-Instruct-2507'
-        )
+        self.monkey_patch_model = model
+        self.monkey_patch_callbk = callbk
+        self.chat_template = get_chat_template(sgl_chat_template or 'default')
 
     def get_chat_template(self):
         return self.chat_template
 
-    def generate(self, prompt, sampling_params):
-        llm = self.monkey_patch_llm
-        tokenizer = llm.tokenizer_manager.tokenizer
-        batch_texts, batch_meta_info = batch_generate(
-            llm,
-            tokenizer,
-            [prompt],
-            sampling_params.to_srt_kwargs(),
+    def generate(self, sgl_prompt, messages, sampling_params):
+        model = self.monkey_patch_model
+        new_text, meta_info = self.monkey_patch_callbk(
+            model, sgl_prompt, messages, sampling_params.to_srt_kwargs(),
         )
-        return batch_texts[0], batch_meta_info[0]
+        return new_text, meta_info
 
 
 def monkey_patch_execute(self, origin_execute_fn, state, other):
     if isinstance(other, SglGen):
-        messages = self.messages_
-        llm = self.backend.monkey_patch_llm
-        tokenizer = llm.tokenizer_manager.tokenizer
-        prompt = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+        new_text, meta_info = self.backend.generate(
+            self.text_, self.messages_,
+            sampling_params=self.default_sampling_para
         )
-        text, meta_info = self.backend.generate(
-            self.text_, sampling_params=self.default_sampling_para
-        )
-
         name = other.name
-        self.text_ += text
-        self.variables[name] = text
+        self.text_ += new_text
+        self.variables[name] = new_text
         self.meta_info[name] = meta_info
         self.variable_event[name].set()
 
@@ -95,16 +88,22 @@ def monkey_patch_execute(self, origin_execute_fn, state, other):
         return origin_execute_fn(other)
 
 
+def money_patch_sgl_function_state(s):
+    s.stream_executor._execute = partial(
+        monkey_patch_execute, s.stream_executor, s.stream_executor._execute, s
+    )
+
+
 #################################
 # Evaluation via SGLang frontend
 #################################
 @sgl.function
 def answer_mt_bench(s, sys_prompt, question_1, question_2):
-    s.stream_executor._execute = partial(
-        monkey_patch_execute, s.stream_executor, s.stream_executor._execute, s
-    )
+    money_patch_sgl_function_state(s)
     if sys_prompt:
         s += sgl.system(sys_prompt)
+    # Note: Even if sgl.system() is not added, SGLang frontend will insert
+    # a default_system_prompt (see `_execute_role_begin` at lang.interpreter)
     s += sgl.user(question_1)
     s += sgl.assistant(sgl.gen("answer_1"))
     s += sgl.user(question_2)
@@ -112,7 +111,7 @@ def answer_mt_bench(s, sys_prompt, question_1, question_2):
 
 
 def run_mtbench(backend, model, data_source, sampling_params,
-                sys_prompt=None, num_threads=1):
+                sys_prompt=None, sgl_chat_template=None, num_threads=1):
     def load_mtbench(filename):
         questions = []
         with open(filename, "r") as fin:
@@ -129,37 +128,20 @@ def run_mtbench(backend, model, data_source, sampling_params,
     if isinstance(backend, RuntimeEndpoint):
         sgl.set_default_backend(backend)
     else:
-        sgl.set_default_backend(MonkeyPatchLangBackend(model))
+        sgl.set_default_backend(CallbackBackend(backend, model, sgl_chat_template))
 
     question_turns = [
-        {"question_1": q["turns"][0], "question_2": q["turns"][1]}
+        {
+            "sys_prompt": sys_prompt,
+            "question_1": q["turns"][0],
+            "question_2": q["turns"][1],
+        }
         for q in questions
     ]
 
-    begin = time.perf_counter()
-    res = answer_mt_bench.run_batch(
+    return answer_mt_bench.run_batch(
         question_turns,
         **sampling_params,
         num_threads=num_threads,
         progress_bar=True
     )
-    time_cost = time.perf_counter() - begin
-
-    meta_info = dict(completion_tokens=0, spec_verify_ct=0)
-    for i, Q in enumerate(question_turns):
-        print('=' * 80)
-        print([Q['question_1']])
-        print(res[i].get_var('answer_1'))
-        mi = res[i].get_meta_info('answer_1')
-        meta_info['completion_tokens'] += mi['completion_tokens']
-        meta_info['spec_verify_ct'] += mi['spec_verify_ct']
-
-        print('=' * 80)
-        print([Q['question_2']])
-        print(res[i].get_var('answer_2'))
-        mi = res[i].get_meta_info('answer_2')
-        meta_info['completion_tokens'] += mi['completion_tokens']
-        meta_info['spec_verify_ct'] += mi['spec_verify_ct']
-    print('-' * 80)
-
-    return meta_info, time_cost

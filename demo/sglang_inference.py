@@ -1,7 +1,6 @@
 import asyncio
 import threading
 import time, json, os, sys, argparse
-from functools import partial
 from queue import Queue
 from transformers import AutoTokenizer
 from colorama import Fore, Style
@@ -13,6 +12,7 @@ from sglang.srt.utils import kill_process_tree
 
 import specforge_het.sglang_adapter as sgl_adapter
 from specforge_het.sglang_adapter_utils import run_mtbench
+from specforge_het.sys_prompts import sys_prompt_lib
 
 
 class LoopRunner:
@@ -58,67 +58,61 @@ class LoopRunner:
         self._thread.join()
         self.loop.close()
 
+    def stream_generate(self, llm, prompt, sampling_params):
+        queue = Queue()
+        async def _stream_once():
+            try:
+                generator = await llm.async_generate(prompt, sampling_params, stream=True)
+                async for chunk in generator:
+                    queue.put(chunk)
+            finally:
+                queue.put(None)
+        future = self.submit(_stream_once())
 
-def stream_generate(llm, tokenizer, prompt, sampling_params):
-    queue = Queue()
-    async def _stream_once():
-        try:
-            generator = await llm.async_generate(prompt, sampling_params, stream=True)
-            async for chunk in generator:
-                queue.put(chunk)
-        finally:
-            queue.put(None)
+        tokenizer = llm.tokenizer_manager.tokenizer
+        output_ids = []
+        meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
+        while True:
+            chunk = queue.get()
+            if chunk is None:
+                break
 
-    runner = llm._loop_runner
-    future = runner.submit(_stream_once())
+            new_ids = chunk["output_ids"][len(output_ids):]
+            meta_info['completion_tokens'] = chunk["meta_info"]['completion_tokens']
+            meta_info['spec_verify_ct'] += 1
+            meta_info['accept_tokens'].append(new_ids)
+            output_ids = chunk["output_ids"][:]
 
-    output_ids = []
-    meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
-    while True:
-        chunk = queue.get()
-        if chunk is None:
-            break
+            print(tokenizer.decode(new_ids), end=" ", flush=True)
 
-        new_ids = chunk["output_ids"][len(output_ids):]
-        meta_info['completion_tokens'] = chunk["meta_info"]['completion_tokens']
-        meta_info['spec_verify_ct'] += 1
-        meta_info['accept_tokens'].append(new_ids)
-        output_ids = chunk["output_ids"][:]
-
-        print(tokenizer.decode(new_ids), end=" ", flush=True)
-
-    # Surface any exception from the background coroutine.
-    future.result()
-    return tokenizer.decode(output_ids), meta_info
+        future.result() # Surface any exception from the background coroutine.
+        return tokenizer.decode(output_ids), meta_info
 
 
-def batch_generate(llm, tokenizer, prompts, sampling_params):
-    async def _batch_once():
-        return await llm.async_generate(prompts, sampling_params, stream=False)
+    def batch_generate(self, llm, prompts, sampling_params):
+        async def _batch_once():
+            return await llm.async_generate(prompts, sampling_params, stream=False)
+        outputs = self.submit(_batch_once()).result()
 
-    runner = llm._loop_runner
-    outputs = runner.submit(_batch_once()).result()
-
-    batch_texts, batch_meta_info = [], []
-    for prompt, output in zip(prompts, outputs):
-        text = tokenizer.decode(output["output_ids"])
-        batch_texts.append(text)
-        batch_meta_info.append(output['meta_info'])
-    return batch_texts, batch_meta_info
+        tokenizer = llm.tokenizer_manager.tokenizer
+        batch_texts, batch_meta_info = [], []
+        for prompt, output in zip(prompts, outputs):
+            text = tokenizer.decode(output["output_ids"])
+            batch_texts.append(text)
+            batch_meta_info.append(output['meta_info'])
+        return batch_texts, batch_meta_info
 
 
-def run_one_example(llm, prompts, sampling_params, bs, warm_up=True):
-    tokenizer = llm.tokenizer_manager.tokenizer
-
+def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True):
     if warm_up:
-        batch_generate(llm, tokenizer, prompts, sampling_params)
+        loop_runner.batch_generate(llm, prompts, sampling_params)
 
     # timed run
     begin = time.perf_counter()
     if bs > 1:
         meta_info = dict(completion_tokens=0, spec_verify_ct=0)
-        batch_texts, batch_meta_info = batch_generate(
-            llm, tokenizer, prompts, sampling_params
+        batch_texts, batch_meta_info = loop_runner.batch_generate(
+            llm, prompts, sampling_params
         )
         for prompt, text, mi in zip(prompts, batch_texts, batch_meta_info):
             print('=' * 80)
@@ -129,7 +123,7 @@ def run_one_example(llm, prompts, sampling_params, bs, warm_up=True):
     else:
         print('=' * 80)
         print(prompts)
-        _, meta_info = stream_generate(llm, tokenizer, prompts[0], sampling_params)
+        _, meta_info = loop_runner.stream_generate(llm, prompts[0], sampling_params)
         print()
     print('-' * 80)
     time_cost = time.perf_counter() - begin
@@ -137,9 +131,9 @@ def run_one_example(llm, prompts, sampling_params, bs, warm_up=True):
     return meta_info, time_cost
 
 
-def get_metrics(llm, meta_info, time_cost, d=3):
+def calc_metrics(llm, loop_runner, meta_info, time_cost, d=3):
     m = meta_info.copy()
-    sis = llm._loop_runner.scheduler_internal_state(llm)
+    sis = loop_runner.scheduler_internal_state(llm)
     m['scheduler_avg_accept_len'] = round(sis['avg_spec_accept_length'], d)
     if accept_tokens := m.pop('accept_tokens', []):
         m['accept_lens'] = [len(ac) for ac in accept_tokens]
@@ -155,7 +149,8 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     disable_cuda_graph=False, disable_radix_cache=True, max_new_tokens=None,
     temperature=0, speculative_algorithm=None, speculative_tree=(6, 10, 60),
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
-    skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False):
+    skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False,
+    sys_prompt=None, mtbench_use_sgl_chat_template=False):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -189,7 +184,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     sampling_params = {"temperature": temperature, "max_new_tokens": max_new_tokens}
 
     llm = sgl.Engine(**engine_kwargs)
-    llm._loop_runner = LoopRunner()
+    loop_runner = LoopRunner()
 
     if skip_tokenizer_init:
         llm.tokenizer_manager.tokenizer = AutoTokenizer.from_pretrained(base_model_path,
@@ -203,7 +198,8 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         {"role": "user", "content": "I'd like to show off how chat templating works!"},
     ]
     tokenizer = llm.tokenizer_manager.tokenizer
-    test_prompt = tokenizer.apply_chat_template(test_messages, tokenize=False)
+    test_prompt = tokenizer.apply_chat_template(test_messages,
+                                tokenize=False, add_generation_prompt=True)
     print('[chat template]', Fore.YELLOW, '\n' + test_prompt, Style.RESET_ALL)
     test_prompt_encoded = tokenizer.encode(test_prompt)
     print('[encode-decode]', Fore.RED, [tokenizer.decode(test_prompt_encoded)], Style.RESET_ALL)
@@ -221,8 +217,10 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             "Provide a concise factual statement about France’s capital city."
         ]
         bs = min(len(questions), bs)
-        messages = lambda question: [{"role": "user", "content": question}]
-        tokenizer = llm.tokenizer_manager.tokenizer
+        messages = lambda question: list(filter(lambda c: c["content"], [
+            {"role": "system", "content": sys_prompt_lib[sys_prompt]},
+            {"role": "user", "content": question}
+        ]))
         prompts = [
             tokenizer.apply_chat_template(
                 messages(Q), tokenize=False, add_generation_prompt=True
@@ -230,15 +228,45 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         ]
 
         meta_info, time_cost = run_one_example(
-            llm, prompts, sampling_params, bs, warm_up=one_example_warmup)
+            llm, loop_runner, prompts, sampling_params, bs, warm_up=one_example_warmup)
 
     else:
-        sys_prompt = "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
-        meta_info, time_cost = run_mtbench(batch_generate, llm, mtbench,
-                                           sampling_params, sys_prompt='',
-                                           num_threads=min(questions_num, bs))
+        def callbk(llm, sgl_prompt, messages, sampling_params):
+            if mtbench_use_sgl_chat_template:
+                prompt = sgl_prompt
+            else:
+                prompt = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            batch_texts, batch_meta_info = loop_runner.batch_generate(
+                llm, [prompt], sampling_params
+            )
+            print('=' * 80)
+            print([prompt])
+            print(batch_texts[0])
+            print('-' * 80)
+            return batch_texts[0], batch_meta_info[0]
 
-    metrics = get_metrics(llm, meta_info, time_cost)
+        begin = time.perf_counter()
+        res = run_mtbench(callbk, llm, mtbench, sampling_params,
+                          sys_prompt=sys_prompt_lib[sys_prompt],
+                          sgl_chat_template=mtbench_use_sgl_chat_template,
+                          num_threads=bs)
+        time_cost = time.perf_counter() - begin
+
+        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
+        for i, res in enumerate(res):
+            #print(res.get_var('answer_1'))
+            mi = res.get_meta_info('answer_1')
+            meta_info['completion_tokens'] += mi['completion_tokens']
+            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+
+            #print(res.get_var('answer_2'))
+            mi = res.get_meta_info('answer_2')
+            meta_info['completion_tokens'] += mi['completion_tokens']
+            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+
+    metrics = calc_metrics(llm, loop_runner, meta_info, time_cost)
     for key, val in metrics.items():
         print(f'{key:>30}:', val)
 
@@ -250,7 +278,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
                 ), sort_keys=True)
             print(j, file=fh)
 
-    llm._loop_runner.shutdown()
+    loop_runner.shutdown()
     llm.shutdown()
 
 
