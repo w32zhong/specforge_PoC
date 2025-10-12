@@ -197,7 +197,8 @@ class MonkeyPatchLangBackend(BaseBackend):
 
         from sglang.lang.chat_template import get_chat_template_by_model_path
         self.chat_template = get_chat_template_by_model_path(
-            'meta-llama/Llama-2-7b-chat-hf'
+            #'meta-llama/Llama-2-7b-chat-hf'
+            'Qwen/Qwen3-4B-Instruct-2507'
         )
 
     def get_chat_template(self):
@@ -245,9 +246,9 @@ def answer_mt_bench(s, question_1, question_2):
         s.stream_executor._execute,
         s
     )
-    s += sgl.system(
-        "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
-    )
+    #s += sgl.system(
+    #    "You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.\n\nIf a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information."
+    #)
     s += sgl.user(question_1)
     s += sgl.assistant(sgl.gen("answer_1"))
     s += sgl.user(question_2)
