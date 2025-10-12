@@ -1,7 +1,7 @@
 import torch
 from functools import partial
 
-from specforge_het.sglang_adapter_mixin import SGLangAdapterMixin
+from specforge_het.sglang_adapter_utils import SGLangAdapterMixin
 
 from sglang.srt.layers.quantization.base_config import QuantizationConfig # resolve circ dep
 from sglang.srt.models.qwen3 import *
