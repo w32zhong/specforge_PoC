@@ -1,8 +1,8 @@
 import os
 from transformers import AutoConfig
 from specforge_het.models import *
+from specforge_het.model_load import local_model_path
 from sglang.srt.models.registry import ModelRegistry
-from huggingface_hub import snapshot_download
 
 # Calling tqdm.tqdm.set_lock(threading.RLock()) pre-populates _lock
 # with a plain thread lock, so that tqdm never uses the default
@@ -19,11 +19,7 @@ for sgl_model in SGL_MODELS:
 def adapted(model_path):
     base_model_config = AutoConfig.from_pretrained(model_path)
     base_model_path = base_model_config.speculative_decoding_base_model_path
-
-    try:
-        model_path = snapshot_download(model_path)
-    except:
-        pass
+    model_path = local_model_path(model_path)
 
     draft_model_path = os.path.join(model_path, 'draft_model')
     draft_model_config = AutoConfig.from_pretrained(draft_model_path)

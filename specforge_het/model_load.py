@@ -5,7 +5,7 @@ from colorama import Fore, Style
 import torch
 import transformers
 import safetensors
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 
 from specforge_het.models import *
@@ -13,6 +13,14 @@ from specforge_het.utils import master_print, get_num_parameters
 
 master_print(transformers.__path__)
 master_print(transformers.__version__)
+
+
+def local_model_path(model_path):
+    try:
+        model_path = snapshot_download(model_path)
+    except:
+        pass
+    return model_path
 
 
 def freeze_model(model):
@@ -66,7 +74,9 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
     try:
         if configs.stand_alone_draft_model_path:
             raise Exception('go to except')
-        model = AutoModelForCausalLM.from_pretrained(configs.model_path,
+
+        model_path = local_model_path(configs.model_path)
+        model = AutoModelForCausalLM.from_pretrained(model_path,
             trust_remote_code=True, **kwargs)
 
     except Exception as e:

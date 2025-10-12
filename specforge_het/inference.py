@@ -40,7 +40,7 @@ def main(config_file='configs.ini', use_saved_json_config=None, **injects):
 
     start_time = time.perf_counter()
 
-    total_generated_tokens = 0
+    new_tokens = 0
     print(tokenizer.batch_decode(test_inputs.input_ids), end='\n', flush=True)
     with torch.no_grad():
         if is_speculative_model(model):
@@ -50,10 +50,11 @@ def main(config_file='configs.ini', use_saved_json_config=None, **injects):
             for tokens in model.speculative_generate(**test_inputs):
                 eos_pos = (tokens == eos).nonzero()
                 accept_tokens = tokens[0] if eos_pos.numel() == 0 else tokens[0, :eos_pos[0,1]]
-                total_generated_tokens += len(accept_tokens)
+                new_tokens += len(accept_tokens)
                 print(tokenizer.decode(accept_tokens), end=' ', flush=True)
-                #print(accept_tokens)
                 if eos_pos.numel() > 0:
+                    break
+                elif new_tokens >= configs.inference.max_new_tokens:
                     break
                 accept_length.append(len(accept_tokens))
                 iter_cost.append(time.perf_counter() - start_iter_time)
@@ -74,18 +75,18 @@ def main(config_file='configs.ini', use_saved_json_config=None, **injects):
             generation_config = GenerationConfig.from_pretrained(
                 configs.modeling.model_path,
                 do_sample=False,
-                max_new_tokens=8000
+                max_new_tokens=model.inference_configs.max_new_tokens
             )
             generated = model.generate(**test_inputs,
                 generation_config=generation_config,
                 streamer=TextStreamer(tokenizer),
             )
             print('\n')
-            total_generated_tokens = len(generated[0])
+            new_tokens = len(generated[0])
 
     seconds = time.perf_counter() - start_time
-    print('num output tokens:', total_generated_tokens, f'in {seconds} sec')
-    print('tokens per second:', round(total_generated_tokens / seconds, 3))
+    print('num output tokens:', new_tokens, f'in {seconds} sec')
+    print('tokens per second:', round(new_tokens / seconds, 3))
 
 
 if __name__ == '__main__':

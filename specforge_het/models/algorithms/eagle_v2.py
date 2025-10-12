@@ -219,7 +219,10 @@ class EagleV2:
         return draft_kv
 
     def prebuilt_position_embeddings(self, inputs_embeds):
-        max_length = min(self.get_max_ctx_length(), self.inference_configs.max_length)
+        max_length = (inputs_embeds.shape[1]
+                      + self.inference_configs.max_new_tokens
+                      + self.inference_configs.dynamic_draft_max_depth + 1)
+        max_length = min(self.get_max_ctx_length(), max_length)
         cache_position = torch.arange(0, max_length, device=inputs_embeds.device)
         position_ids = cache_position.unsqueeze(0)
         return self.get_positional_embedding(inputs_embeds, position_ids)
