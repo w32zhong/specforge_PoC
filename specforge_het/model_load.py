@@ -102,7 +102,9 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         draft_config = AutoConfig.from_pretrained(draft_config_path)
         draft_config = copy.deepcopy(draft_config)
         base = model.config # for eval short hands
-        for key, val in configs.draft_config_modify.items():
+        draft_config_modify = configs.draft_config_modify
+        draft_config_modify.update(configs.draft_config_custom_modify)
+        for key, val in draft_config_modify.items():
             val = eval(val)
             old_val = getattr(draft_config, key)
             if old_val != val:
