@@ -101,11 +101,14 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         draft_class_name, draft_config_path = configs.init_draft_config
         draft_config = AutoConfig.from_pretrained(draft_config_path)
         draft_config = copy.deepcopy(draft_config)
-        base = model.config # for eval short hands
+        base = model.config # for eval() short hands
         draft_config_modify = configs.draft_config_modify
+        draft_config_modify_keys = list(draft_config_modify.keys())
         draft_config_modify.update(configs.draft_config_custom_modify)
-        for key, val in draft_config_modify.items():
-            val = eval(val)
+        draft_config_modify_keys += list(configs.draft_config_custom_modify.keys())
+        # draft_config_modify_keys list ensures custom keys overwrite default keys.
+        for key in draft_config_modify_keys:
+            val = eval(draft_config_modify[key])
             old_val = getattr(draft_config, key)
             if old_val != val:
                 setattr(draft_config, key, val)
