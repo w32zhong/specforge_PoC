@@ -10,10 +10,12 @@ RUN apt install -y locales && \
 # install nvim
 RUN git clone --depth 1 -b v0.11.4 https://github.com/neovim/neovim && \
     cd neovim && make CMAKE_BUILD_TYPE=Release && make install && cd .. && rm -rf neovim
-# install node and Python LSP
+# install Node.js, NPM, and Python LSP
 RUN wget https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.3/install.sh && \
-    bash install.sh && bash -c 'source ~/.nvm/nvm.sh && nvm install v24.5.0' && rm install.sh
-RUN ln -s `which node` /usr/bin/node # for nvim CoPilot to locate
+    bash install.sh && rm install.sh
+ENV NVM_DIR=/root/.nvm
+ENV PATH=$NVM_DIR/versions/node/v24.5.0/bin:$PATH
+RUN bash -lc "source $NVM_DIR/nvm.sh && nvm install 24.5.0 && nvm alias default 24.5.0"
 RUN npm install -g pyright
 # python3.12
 RUN apt install -y python3-pip && ln -sf `which python3` /usr/bin/python
