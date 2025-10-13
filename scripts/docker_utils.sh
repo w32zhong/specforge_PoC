@@ -2,8 +2,9 @@ CR_PREFIX=${1-ghcr.io/w32zhong}
 
 function build() {
     module=$1
+    shift 1
     set -x
-    docker build -f ${module}_dockerfile --build-arg MODEL=$module -t $module .
+    docker build -f ${module}_dockerfile --build-arg MODEL=$module -t $module $@ .
     docker image tag $module ${CR_PREFIX}/${module}:latest
     set +x
 }
