@@ -131,17 +131,18 @@ the same checkpoint of original EAGLE-v2 paper but with config.json `architectur
 field modified to indicate SGLang that we are using an EAGLE speculative draft model)
 
 Because SGLang is somewhat a complicated software stack and is hard to install,
-it is recommended to use a container build. In this case, a good workflow would be:
+it is recommended to use a container build. For example, my current workflow looks like:
 ```sh
-source docker_utils.sh
-build specforge_het_and_sglang
-# run a detached container in the background
-HF_TOKEN=YOUR_TOKEN docker run -d \
+source ./scripts/docker_utils.sh
+build specforge_het_and_sglang --build-arg CUDA_ARCH_LIST=8.9
+# run a detached (-d) container in the background
+docker run -d \
     --env HF_TOKEN=$HF_TOKEN --gpus all --ipc=host \
     -v $HOME/.cache:/root/.cache -v `pwd`/nvim_plugins:/root/.local/share/nvim \
-    -v `pwd`:/workspace/mnt -v ~/.codex:/root/.codex \
-    -v /mnt/asus_card/hfdownloader:/workspace/hfdownloader \
-    -it specforge_het_and_sglang /bin/bash
+    -v $HOME/.ssh:/root/.ssh -v `pwd`:/workspace/mnt -v ~/.codex:/root/.codex \
+    -v $HOME/.config/github-copilot:/root/.config/github-copilot -v /mnt:/mnt \
+    -it specforge_het_and_sglang bash
+
 docker ps # find this active container
 docker exec -it <container name or ID> bash # attach to it
 ```
