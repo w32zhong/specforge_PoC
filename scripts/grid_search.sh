@@ -33,7 +33,7 @@ for model_path in $MODEL_PATHS; do
       dev=$((cnt % $TOTAL_GPUS))
       set -x
       CUDA_VISIBLE_DEVICES=$dev flock grid_search_gpu${dev}.lock \
-        python demo_sglang_inference.py engine_mode --bs $bs \
+        python -m demo.sglang_inference engine_mode --bs $bs \
         --dtype bfloat16 --disable_cuda_graph --speculative_algorithm EAGLE \
         --mtbench question.jsonl --outfile ./grid_search_gpu${dev}.log \
         -speculative_tree $tree $model_path &
