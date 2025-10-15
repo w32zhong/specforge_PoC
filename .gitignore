@@ -2,8 +2,11 @@ __pycache__/
 output/
 wandb/
 logs/
+nvim_plugins/
 .env
 *.log
+*.pt
+*.pth
 *.swp
 *.lock
 *.jsonl

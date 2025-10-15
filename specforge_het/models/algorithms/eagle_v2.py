@@ -1,5 +1,6 @@
 import torch, random
 from transformers.cache_utils import DynamicCache
+from specforge_het.debug import g_tensor_ckpt, debug_hook_model
 
 
 def finalize_mask(mask): # 0 -> -infty,  1 -> 0
@@ -102,6 +103,18 @@ class EagleV2:
                 last_device = self.device
             load_device = last_device
             self.draft_model.to(device=load_device, dtype=self.base_model.dtype)
+
+        #debug_hook_model(self,
+        #    stack_regex_filters=[
+        #        r'.*/modeling_speculative_.*', r'/workspace/mnt/specforge_het/.*'
+        #    ],
+        #    path_regex_filters=[
+        #        r'model\.embed_tokens$', r'lm_head$',
+        #        r'model$', r'model\.layers\.(0|1|31|35)$', r'model.norm$',
+        #        r'_draft_model$', r'_draft_model\.layers\.(0|1|2)$', r'_draft_model.norm$',
+        #    ],
+        #    verbose=False
+        #)
 
     @staticmethod
     def eagle_noise(tensor):
@@ -260,6 +273,9 @@ class EagleV2:
                 base_kv, position_embeddings, past_seq_len,
                 **draft_outputs
             )
+            #torch.save(g_tensor_ckpt, "my_llama2.pth")
+            #torch.save(g_tensor_ckpt, "my_qwen3.pth")
+            #quit()
 
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
             self.reset_kv_cache(base_kv, draft_kv, past_seq_len, accept_idx)

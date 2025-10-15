@@ -1,4 +1,5 @@
 import re
+import copy
 import inspect
 import numpy as np
 from functools import partial
@@ -13,10 +14,28 @@ def count(d=1):
     return g_count
 
 
-def debug_hook_model(model, stack_match='transformers'):
+def debug_hook_model(model, stack_regex_filters=[], path_regex_filters=[], verbose=False, prefix=''):
     import torch
-    def hook_fn(model, path, module, inputs, output):
+    def hook_fn(path, prefix, module, inputs, output):
+        if verbose: print(path)
+        if path_regex_filters:
+            for regex in path_regex_filters:
+                if re.match(regex, path):
+                    break
+            else:
+                return
         stack_filenames = [s.filename for s in inspect.stack()]
+        for i, filename in enumerate(stack_filenames):
+            if filename == __file__:
+                continue
+            for regex in stack_regex_filters:
+                if re.match(regex, filename):
+                    break
+            else:
+                continue
+            break
+        else:
+            i = 0
         try:
             assert isinstance(inputs, tuple)
 
@@ -27,15 +46,12 @@ def debug_hook_model(model, stack_match='transformers'):
                 else:
                     serializable_inputs.append(str(input))
 
-            for i, filename in enumerate(stack_filenames):
-                if stack_match in filename:
-                    break
-            else:
-                raise ValueError
+            serializable_inputs = copy.deepcopy(serializable_inputs)
+            output = copy.deepcopy(output)
 
             frame = inspect.stack()[i]
             file, line = frame.filename, frame.lineno
-            key = f'step{count():03}__{path}'
+            key = f'{count():03}_{prefix}{path}'
             print(f'[hook] [{key}] -> {file}:{line}')
 
         except:
@@ -48,7 +64,7 @@ def debug_hook_model(model, stack_match='transformers'):
 
     for path, module in model.named_modules():
         module.register_forward_hook(
-            partial(hook_fn, model, path)
+            partial(hook_fn, path, prefix)
         )
 
 
@@ -77,9 +93,11 @@ def tensor_error(t1, t2):
                 + f' mean={d.mean().item()}.')
 
 
-def first_matrix(x):
+def first_matrix(x, use_attr=None):
     import torch
-    if isinstance(x, torch.Tensor):
+    if use_attr and hasattr(x, use_attr):
+        return first_matrix(getattr(x, use_attr))
+    elif isinstance(x, torch.Tensor):
         return x.squeeze()
     elif isinstance(x, tuple) and len(x) > 0:
         return first_matrix(x[0])
@@ -89,7 +107,8 @@ def first_matrix(x):
         return x
 
 
-def interactive_diff_hook_ckpts(ckpt_1_path, ckpt_2_path, window=12):
+def interactive_diff_hook_ckpts(ckpt_1_path, ckpt_2_path, window=12,
+                                extra_out_attrs=['last_hidden_state', 'next_token_logits']):
     import torch
     from types import SimpleNamespace
     ckpt_1 = torch.load(ckpt_1_path, weights_only=False)
@@ -111,7 +130,8 @@ def interactive_diff_hook_ckpts(ckpt_1_path, ckpt_2_path, window=12):
             c2 = SimpleNamespace(**ckpt_2[ckpt_2_keys[cnt_2]])
             i1, i2 = first_matrix(c1.inputs), first_matrix(c2.inputs)
             print(Fore.BLUE, 'Input error:', tensor_error(i1, i2), Style.RESET_ALL)
-            o1, o2 = first_matrix(c1.output), first_matrix(c2.output)
+            o1 = first_matrix(c1.output, use_attr=extra_out_attrs[0])
+            o2 = first_matrix(c2.output, use_attr=extra_out_attrs[1])
             print(Fore.CYAN, 'Output error:', tensor_error(o1, o2), Style.RESET_ALL)
             breakpoint()
         try:
