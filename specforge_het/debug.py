@@ -17,7 +17,6 @@ def count(d=1):
 def debug_hook_model(model, stack_regex_filters=[], path_regex_filters=[], verbose=False, prefix=''):
     import torch
     def hook_fn(path, prefix, module, inputs, output):
-        if verbose: print(path)
         if path_regex_filters:
             for regex in path_regex_filters:
                 if re.match(regex, path):
@@ -25,6 +24,7 @@ def debug_hook_model(model, stack_regex_filters=[], path_regex_filters=[], verbo
             else:
                 return
         stack_filenames = [s.filename for s in inspect.stack()]
+        if verbose: print(path, stack_filenames)
         for i, filename in enumerate(stack_filenames):
             if filename == __file__:
                 continue

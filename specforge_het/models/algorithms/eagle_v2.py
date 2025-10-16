@@ -106,7 +106,7 @@ class EagleV2:
 
         #debug_hook_model(self,
         #    stack_regex_filters=[
-        #        r'.*/modeling_speculative_.*', r'/workspace/mnt/specforge_het/.*'
+        #        r'.*/eagle_v2.py'
         #    ],
         #    path_regex_filters=[
         #        r'model\.embed_tokens$', r'lm_head$',
