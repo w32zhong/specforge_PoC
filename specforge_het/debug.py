@@ -134,14 +134,22 @@ def interactive_diff_hook_ckpts(ckpt_1_path, ckpt_2_path, window=12,
             o2 = first_matrix(c2.output, use_attr=extra_out_attrs[1])
             print(Fore.CYAN, 'Output error:', tensor_error(o1, o2), Style.RESET_ALL)
             breakpoint()
-        try:
-            cnt_1 = ckpt_1_keys.index(k)
-        except:
-            pass
-        try:
-            cnt_2 = ckpt_2_keys.index(k)
-        except:
-            pass
+
+        if isinstance(k, int):
+            cnt_1 += k
+            cnt_2 += k
+        elif isinstance(k, tuple):
+            cnt_1 += k[0]
+            cnt_2 += k[1]
+        elif isinstance(k, str):
+            try:
+                cnt_1 = ckpt_1_keys.index(k)
+            except:
+                pass
+            try:
+                cnt_2 = ckpt_2_keys.index(k)
+            except:
+                pass
 
 
 def test_nan_grad(model):
