@@ -4,14 +4,15 @@ import inspect
 import numpy as np
 from functools import partial
 from colorama import Fore, Style
+from collections import defaultdict
 
-g_count = 0
+g_count = defaultdict(int)
 g_tensor_ckpt = dict()
 
-def count(d=1):
+def count(key='default', d=1):
     global g_count
-    g_count += d
-    return g_count
+    g_count[key] += d
+    return g_count[key]
 
 
 def debug_hook_model(model, stack_regex_filters=[], path_regex_filters=[], verbose=False, prefix=''):
@@ -136,11 +137,11 @@ def interactive_diff_hook_ckpts(ckpt_1_path, ckpt_2_path, window=12,
             breakpoint()
 
         if isinstance(k, int):
-            cnt_1 += k
-            cnt_2 += k
+            cnt_1 = max(cnt_1 + k, 0)
+            cnt_2 = max(cnt_2 + k, 0)
         elif isinstance(k, tuple):
-            cnt_1 += k[0]
-            cnt_2 += k[1]
+            cnt_1 = max(cnt_1 + k[0], 0)
+            cnt_2 = max(cnt_2 + k[1], 0)
         elif isinstance(k, str):
             try:
                 cnt_1 = ckpt_1_keys.index(k)

@@ -8,17 +8,16 @@ from sglang.srt.models.qwen3 import *
 from sglang.srt.utils import add_prefix
 
 
-class ReturnTupleIdentity(torch.nn.Identity):
-    def forward(self, *args, **kwargs):
-        input = args[0] if args else next(iter(kwargs.values()))
-        return (input, None)
+class FusedResidualIdentity(torch.nn.Identity):
+    def forward(self, hidden_states, residual):
+        return (hidden_states + residual, None)
 
 
 def EagleV2_adapt(self, base_model_config, draft_model_config):
     if base_model_config.get('skip_first_input_layernorm', True):
         del self.model.layers[0].input_layernorm
     if base_model_config.get('skip_output_norm', True):
-        self.model.norm = ReturnTupleIdentity()
+        self.model.norm = FusedResidualIdentity()
 
     # Embedding layers are handled in SGLang Worker.set_embed_and_head().
     # Under tie_word_embeddings, this could be deleted twice by the SGLang
