@@ -65,7 +65,8 @@ def get_state_dict(model_path):
                     state_dict.update(partial_state_dict)
                 return state_dict
 
-            except Exception:
+            except Exception as e:
+                print(e)
                 continue
     return None
 
