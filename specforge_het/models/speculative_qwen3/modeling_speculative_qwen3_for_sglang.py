@@ -10,7 +10,10 @@ from sglang.srt.utils import add_prefix
 
 class FusedResidualIdentity(torch.nn.Identity):
     def forward(self, hidden_states, residual):
-        return (hidden_states + residual, None)
+        if residual is None:
+            return (hidden_states, None)
+        else:
+            return (hidden_states + residual, None)
 
 
 def EagleV2_adapt(self, base_model_config, draft_model_config):
