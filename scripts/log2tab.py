@@ -68,12 +68,12 @@ def first_match(matches, key, none_char='-', round_to=2):
 def multi_layer_results(path):
     for ckpt in 'blooming-silence-78,laced-wood-90,trim-waterfall-88'.split(',')[::-1]:
         for i, col_filter in enumerate([
-            f'--bs=1&-speculative_tree=6,10,60&w32zhong/{ckpt}',
-            f'--bs=4&-speculative_tree=6,10,60&w32zhong/{ckpt}',
-            f'--bs=8&-speculative_tree=6,10,60&w32zhong/{ckpt}',
-            f'--bs=1&-speculative_tree=3,1,4&w32zhong/{ckpt}',
-            f'--bs=4&-speculative_tree=3,1,4&w32zhong/{ckpt}',
-            f'--bs=8&-speculative_tree=3,1,4&w32zhong/{ckpt}',
+            f'--bs=1&--speculative_tree=6,10,60&w32zhong/{ckpt}',
+            f'--bs=4&--speculative_tree=6,10,60&w32zhong/{ckpt}',
+            f'--bs=8&--speculative_tree=6,10,60&w32zhong/{ckpt}',
+            f'--bs=1&--speculative_tree=3,1,4&w32zhong/{ckpt}',
+            f'--bs=4&--speculative_tree=3,1,4&w32zhong/{ckpt}',
+            f'--bs=8&--speculative_tree=3,1,4&w32zhong/{ckpt}',
         ]):
             matches = filter_jsonl(path, '*', argv=col_filter.split('&'))
             m1 = filter_json_array([m['*'] for m in matches], 'throughputs', 'avg_accept_len',
@@ -96,7 +96,7 @@ def multi_layer_results(path):
 
 
 def usage_examples():
-    example1 = """experiments.jsonl avg_accept_len throughputs --argv "['--bs=4','w32zhong/blooming-silence-78','-speculative_tree=3,1,4']"
+    example1 = """experiments.jsonl avg_accept_len throughputs --argv "['--bs=4','w32zhong/blooming-silence-78','--speculative_tree=3,1,4']"
     """
     print('python', sys.argv[0], 'filter_jsonl', example1)
 
