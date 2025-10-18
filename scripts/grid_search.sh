@@ -29,7 +29,7 @@ for model_path in $MODEL_PATHS; do
             --max_new_tokens 2048 \
             --dtype bfloat16 \
             --disable_cuda_graph $disable_cuda_graph \
-            --speculative_algorithm EAGLE -speculative_tree $tree \
+            --speculative_algorithm EAGLE --speculative_tree $tree \
             $model_path &
         set +x
         let "cnt += 1"
