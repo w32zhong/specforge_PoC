@@ -19,7 +19,7 @@ class SGLangAdapterMixin:
 
         return AlgoClass.__name__, base_model_config, config
 
-    def warn_unmatch_weights(self, weights):
+    def warn_mismatch_weights(self, weights):
         model_params_keys = set([key for key, _ in self.named_parameters()])
         load_weights_keys = set([key for key, _ in weights])
 

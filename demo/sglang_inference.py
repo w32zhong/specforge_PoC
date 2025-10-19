@@ -88,7 +88,6 @@ class LoopRunner:
         future.result() # Surface any exception from the background coroutine.
         return tokenizer.decode(output_ids), meta_info
 
-
     def batch_generate(self, llm, prompts, sampling_params):
         async def _batch_once():
             return await llm.async_generate(prompts, sampling_params, stream=False)

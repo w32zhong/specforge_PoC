@@ -62,7 +62,7 @@ class Qwen3DrafterForSGLang(Qwen3ForCausalLM, SGLangAdapterMixin):
 
     def load_weights(self, weights):
         weights = [(add_prefix(k, "model"), v) for k, v in weights]
-        super().load_weights(self.warn_unmatch_weights(weights))
+        super().load_weights(self.warn_mismatch_weights(weights))
 
     # speculative decoding algorithm interfaces
     @property
