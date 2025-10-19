@@ -134,7 +134,7 @@ Because SGLang is somewhat a complicated software stack and is hard to install,
 it is recommended to use a container build. For example, my current workflow looks like:
 ```sh
 source ./scripts/docker_utils.sh
-build specforge_het_and_sglang --build-arg CUDA_ARCH_LIST=8.9
+build specforge_het_and_sglang --build-arg CUDA_ARCH_LIST='8.9;12.0'
 # run a detached (-d) container in the background
 docker run -d \
     --env HF_TOKEN=$HF_TOKEN --gpus all --ipc=host \

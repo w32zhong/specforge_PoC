@@ -16,6 +16,23 @@ set(CMAKE_SHARED_LIBRARY_PREFIX "")
 # Python
 find_package(Python COMPONENTS Interpreter Development.Module ${SKBUILD_SABI_COMPONENT} REQUIRED)
 
+# set libc C++ ABI according to TORCH C++ ABI
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"
+    OUTPUT_VARIABLE TORCH_CXX11_ABI
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(TORCH_CXX11_ABI STREQUAL "0")
+    message(STATUS "Using old C++ ABI (-D_GLIBCXX_USE_CXX11_ABI=0)")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+else()
+    message(STATUS "Using new C++11 ABI (-D_GLIBCXX_USE_CXX11_ABI=1)")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
+endif()
+
 # C++
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -80,7 +97,6 @@ set(SGL_KERNEL_CUDA_FLAGS
     "-O3"
     "-Xcompiler" # It tells nvcc to pass the following options to CXX:
     "-fPIC"
-    "-gencode=arch=compute_90,code=sm_90"
     "-std=c++17"
     "-DFLASHINFER_ENABLE_F16" # enable half precision
     "-DCUTE_USE_PACKED_TUPLE=1" # store tuples within CUTE in a packed format
@@ -91,7 +107,6 @@ set(SGL_KERNEL_CUDA_FLAGS
     "--expt-relaxed-constexpr" # allow a more relaxed C++ constexpr rules in nvcc
     "--expt-extended-lambda" # allow C++20 lambda syntax in nvcc
 
-    # Supress warnings
     "-Xcompiler=-Wno-clang-format-violations"
     "-Xcompiler=-Wno-conversion"
     "-Xcompiler=-Wno-deprecated-declarations"
@@ -100,7 +115,6 @@ set(SGL_KERNEL_CUDA_FLAGS
     "-Xcompiler=-ftemplate-backtrace-limit=1"
     "-Xcudafe=--diag_suppress=177"   # variable was declared but never referenced
     "-Xcudafe=--diag_suppress=2361"  # invalid narrowing conversion from "char" to "signed char"
-
     # uncomment to debug
     # "--ptxas-options=-v"
     # "--ptxas-options=--verbose,--register-usage-level=10,--warn-on-local-memory-usage"
@@ -112,50 +126,26 @@ list(APPEND SGL_KERNEL_CUDA_FLAGS
 
 # enable BF16
 list(APPEND SGL_KERNEL_CUDA_FLAGS
-"-DFLASHINFER_ENABLE_BF16"
+    "-DFLASHINFER_ENABLE_BF16"
 )
-
-# CUDA -gencode flags (determined by TORCH_CUDA_ARCH_LIST)
-if(TORCH_CUDA_ARCH_LIST)
-    # Split the TORCH_CUDA_ARCH_LIST string into individual architecture strings
-    string(REPLACE ";" " " _cuda_arch_list "${TORCH_CUDA_ARCH_LIST}")
-
-    foreach(_arch_item IN LISTS _cuda_arch_list)
-        # Remove the dot to get the compute_XY / sm_XY format
-        string(REPLACE "." "" _arch_value "${_arch_item}")
-
-        # Add 'a' suffix for specific architectures
-        if(_arch_item STREQUAL "9.0")
-            set(_arch_value "${_arch_value}a")
-        elseif(_arch_item STREQUAL "12.0")
-            set(_arch_value "${_arch_value}a")
-        endif()
-
-        # Construct the -gencode flag
-        list(APPEND SGL_KERNEL_CUDA_FLAGS
-            "-gencode=arch=compute_${_arch_value},code=sm_${_arch_value}"
-        )
-        message(STATUS "Added CUDA arch flag: compute_${_arch_value},code=sm_${_arch_value}")
-    endforeach()
-else()
-    message(FATAL_ERROR "TORCH_CUDA_ARCH_LIST is not set.")
-endif()
 
 # C source files
 set(SOURCES
+    "csrc/common_extension.cc"
+
     "csrc/attention/cascade.cu"
-    "csrc/attention/cutlass_mla_kernel.cu"
     "csrc/attention/lightning_attention_decode_kernel.cu"
+    "csrc/attention/cutlass_mla_kernel.cu"
     "csrc/attention/merge_attn_states.cu"
+
     "csrc/elementwise/activation.cu"
     "csrc/elementwise/cast.cu"
     "csrc/elementwise/copy.cu"
+    "csrc/elementwise/concat_mla.cu"
     "csrc/elementwise/fused_add_rms_norm_kernel.cu"
     "csrc/elementwise/rope.cu"
     "csrc/elementwise/topk.cu"
-    "csrc/common_extension.cc"
 
-    "csrc/moe/cutlass_moe/w4a8/scaled_mm_entry.cu"
     "csrc/moe/moe_align_kernel.cu"
     "csrc/moe/moe_fused_gate.cu"
     "csrc/moe/moe_sum_reduce.cu"
@@ -175,56 +165,77 @@ set(SOURCES
     "${FLASHINFER_DIR}/csrc/sampling.cu"
 )
 
-# Build SM100+ library with precise math (same namespace, different directory)
+# GPU arch-dependent configurations (determined by TORCH_CUDA_ARCH_LIST)
+if(TORCH_CUDA_ARCH_LIST)
+    foreach(_dot_arch IN LISTS TORCH_CUDA_ARCH_LIST)
+        # Remove the dot from X.Y to get the compute_XY / sm_XY format
+        string(REPLACE "." "" _int_arch "${_dot_arch}")
 
-# call Python_add_library provided by `scikit-build` to build dynamic lib with
-# Stable Python ABI from SOURCES
-Python_add_library(common_ops_sm100_build MODULE USE_SABI
-	${SKBUILD_SABI_VERSION} WITH_SOABI ${SOURCES})
+        # name our build target for this arch
+        set(TARGET_NAME "common_ops_sm${_int_arch}_build")
 
-# add C macro to disable fast math
-target_compile_definitions(common_ops_sm100_build PRIVATE
-    USE_FAST_MATH=0
-)
+        # arch-dependent configurations
+        set(_cuda_flags ${SGL_KERNEL_CUDA_FLAGS})
 
-# add a CMake generator expression to add our CUDA CFLAGS only to .cu files
-target_compile_options(common_ops_sm100_build PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:${SGL_KERNEL_CUDA_FLAGS}>
-)
+        # Add 'a' suffix for specific architectures (e.g., "120a")
+        if(_dot_arch STREQUAL "9.0")
+            set(_specific_arch "${_int_arch}a")
+            set(_use_fast_math 1)
 
-# additional headers for common_ops_sm100_build target
-target_include_directories(common_ops_sm100_build PRIVATE
-    ${PROJECT_SOURCE_DIR}/csrc
-    ${repo-cutlass_SOURCE_DIR}/examples/77_blackwell_fmha
-    ${repo-cutlass_SOURCE_DIR}/examples/common
-    ${repo-flash-attention_SOURCE_DIR}/csrc/flash_attn/src
-)
+        elseif(_dot_arch STREQUAL "12.0")
+            set(_specific_arch "${_int_arch}a")
+            set(_use_fast_math 0)
 
-# Set output name and separate build directory to avoid conflicts
-set_target_properties(common_ops_sm100_build PROPERTIES
-    OUTPUT_NAME "common_ops" # generate common_ops.so
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sm100" # under subdir
-)
+        elseif(_dot_arch STREQUAL "8.9")
+            set(_specific_arch "${_int_arch}")
+            set(_use_fast_math 0)
 
-# set libc C++ ABI according to TORCH C++ ABI
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"
-    OUTPUT_VARIABLE TORCH_CXX11_ABI
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-if(TORCH_CXX11_ABI STREQUAL "0")
-    message(STATUS "Using old C++ ABI (-D_GLIBCXX_USE_CXX11_ABI=0)")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+        else()
+            message(FATAL_ERROR "Unsupported TORCH_CUDA_ARCH_LIST entry: ${_dot_arch}")
+        endif()
+
+        # Construct the -gencode flag just for this target
+        list(APPEND _cuda_flags
+            "-gencode=arch=compute_${_specific_arch},code=sm_${_specific_arch}"
+        )
+
+        # call Python_add_library provided by `scikit-build` to build dynamic lib with
+        # Stable Python ABI from SOURCES
+        Python_add_library(${TARGET_NAME} MODULE USE_SABI
+            ${SKBUILD_SABI_VERSION} WITH_SOABI ${SOURCES})
+
+        # enable/disable fast math (must follow Python_add_library)
+        target_compile_definitions(${TARGET_NAME} PRIVATE
+            USE_FAST_MATH=${_use_fast_math}
+        )
+
+        # additional C headers
+        target_include_directories(${TARGET_NAME} PRIVATE
+            ${PROJECT_SOURCE_DIR}/csrc
+            ${repo-cutlass_SOURCE_DIR}/examples/common
+            ${repo-cutlass_SOURCE_DIR}/examples/77_blackwell_fmha
+        )
+
+        # add a CMake generator expression to add our CUDA CFLAGS only to .cu files
+        message(STATUS "SGL CUDA flags for ${TARGET_NAME}: ${_cuda_flags}")
+        target_compile_options(${TARGET_NAME} PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:${_cuda_flags}>
+        )
+
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            OUTPUT_NAME "common_ops"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sm${_int_arch}"
+        )
+
+        # link libraries
+        target_link_libraries(${TARGET_NAME} PRIVATE ${TORCH_LIBRARIES}
+                              c10 cuda cublas cublasLt)
+
+        # specify install directory
+        install(TARGETS ${TARGET_NAME} LIBRARY DESTINATION sgl_kernel/sm${_int_arch})
+
+    endforeach()
+
 else()
-    message(STATUS "Using new C++11 ABI (-D_GLIBCXX_USE_CXX11_ABI=1)")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=1")
+    message(FATAL_ERROR "TORCH_CUDA_ARCH_LIST is not set.")
 endif()
-
-# link libraries 
-target_link_libraries(common_ops_sm100_build PRIVATE ${TORCH_LIBRARIES} c10 cuda cublas cublasLt)
-
-# specify install directory
-install(TARGETS common_ops_sm100_build LIBRARY DESTINATION sgl_kernel/sm100)
