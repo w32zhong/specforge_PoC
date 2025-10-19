@@ -13,7 +13,7 @@ for model in $MODELS; do
   MODEL_PATHS="$MODEL_PATHS $HGF_USER/$model"
 done
 
-rm -f grid_search_gpu*.log
+rm -f gpu*.log
 cnt=0
 
 for model_path in $MODEL_PATHS; do
@@ -22,10 +22,10 @@ for model_path in $MODEL_PATHS; do
       for disable_cuda_graph in True False; do
         dev=$((cnt % $TOTAL_GPUS))
         set -x
-        CUDA_VISIBLE_DEVICES=$dev flock grid_search_gpu${dev}.lock \
+        CUDA_VISIBLE_DEVICES=$dev flock gpu${dev}.lock \
           python -m demo.sglang_inference engine_mode --bs $bs \
             --mtbench question.jsonl${DATA_RANGE} \
-            --outfile ./grid_search_gpu${dev}.log \
+            --outfile ./gpu${dev}.log \
             --max_new_tokens 2048 \
             --dtype bfloat16 \
             --disable_cuda_graph $disable_cuda_graph \
@@ -41,10 +41,10 @@ done
 for model_path in $MODEL_PATHS; do
     dev=$((cnt % $TOTAL_GPUS))
     set -x
-    CUDA_VISIBLE_DEVICES=$dev flock grid_search_gpu${dev}.lock \
+    CUDA_VISIBLE_DEVICES=$dev flock gpu${dev}.lock \
       python -m specforge_het.inference \
         --mtbench question.jsonl${DATA_RANGE} \
-        --outfile ./grid_search_gpu${dev}.log \
+        --outfile ./gpu${dev}.log \
         --inference.max_new_tokens 2048 \
         --modeling.dtype torch.bfloat16 \
         --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
