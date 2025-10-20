@@ -18,7 +18,8 @@ class FusedResidualIdentity(torch.nn.Identity):
 
 def EagleV2_adapt(self, base_model_config, draft_model_config):
     if base_model_config.get('skip_first_input_layernorm', True):
-        del self.model.layers[0].input_layernorm
+        self.model.layers[0].input_layernorm = torch.nn.Identity()
+        self.model.layers[0].layer_communicator.input_layernorm = torch.nn.Identity()
     if base_model_config.get('skip_output_norm', True):
         self.model.norm = FusedResidualIdentity()
 
