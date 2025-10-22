@@ -32,6 +32,7 @@ class UnitTest(unittest.TestCase):
         assert not composed_cfg.train.dict()
         assert not composed_cfg.training.non_exists.dict()
         assert 'max_length' in composed_cfg.training.dict()
+        assert getattr(composed_cfg, 'training').tf32 is False
 
     @unittest.expectedFailure
     def test2(self):
