@@ -29,7 +29,9 @@ class UnitTest(unittest.TestCase):
             unexpected_keys = cfg.load_json_file(f'{tempdir}/compo.json')
         assert len(unexpected_keys) == 5
 
-        print(composed_cfg.training.max_length)
+        assert not composed_cfg.train.dict()
+        assert not composed_cfg.training.non_exists.dict()
+        assert 'max_length' in composed_cfg.training.dict()
 
     @unittest.expectedFailure
     def test2(self):

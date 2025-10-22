@@ -107,11 +107,17 @@ class _CompoConfigProxy:
             self._root.accessed_keys.add(full_key)
             return configs[full_key]
         else:
-            raise KeyError
+            return _CompoConfigProxy(self._root, full_key)
 
     def __setattr__(self, key, value):
         full_key = f"{self._prefix}.{key}"
         self._root._configs[full_key] = value
 
+    def dict(self):
+        configs = self._root._configs.copy()
+        prefix = self._prefix + '.'
+        return {k.removeprefix(prefix): v for k, v in configs.items() if k.startswith(prefix)}
+
     def __repr__(self):
-        return f"<ConfigProxy prefix='{self._prefix}'>"
+        pretty_print = json.dumps(self.dict(), indent=2)
+        return f"{self.__class__.__name__}(prefix={self._prefix},\n{pretty_print})"
