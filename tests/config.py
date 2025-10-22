@@ -34,6 +34,9 @@ class UnitTest(unittest.TestCase):
         assert 'max_length' in composed_cfg.training.dict()
         assert getattr(composed_cfg, 'training').tf32 is False
 
+        composed_cfg.foo.bar = 'baz'
+        assert composed_cfg.foo.bar == 'baz'
+
     @unittest.expectedFailure
     def test2(self):
         cfg = CompoConfig.from_config_file('./tests/configs.ini')
@@ -46,13 +49,35 @@ class UnitTest(unittest.TestCase):
     def test3(self):
         cfg1 = CompoConfig.from_composer('./tests/configs.ini')
         cfg2 = CompoConfig.from_composer_config(
-            CompoConfig({'config.path': './tests/configs.ini'})
+            CompoConfig({
+                'config.path': './tests/configs.ini',
+                'config.save_json_file_name': 'foo.json',
+            })
         )
 
         with tempfile.TemporaryDirectory() as tempdir:
             cfg2.save_json_file(tempdir)
-            unexpected_keys = cfg1.load_json_file(f'{tempdir}/compo.json')
+            unexpected_keys = cfg1.load_json_file(f'{tempdir}/foo.json')
         assert len(unexpected_keys) == 0
+
+    def test4(self):
+        cfg = CompoConfig.from_composer_config(
+            CompoConfig({
+                'config.path': './tests/configs.ini',
+                'config.save_json_file_name': 'foo.json',
+            })
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            cfg['config.version'] = 'v2'
+            cfg.save_json_file(tempdir)
+            cfg['config.version'] = 'v1'
+            try:
+                cfg.load_json_file(f'{tempdir}/foo.json')
+            except Exception as e:
+                print(e)
+                assert isinstance(e, ValueError)
+            else:
+                assert False
 
 
 if __name__ == '__main__':

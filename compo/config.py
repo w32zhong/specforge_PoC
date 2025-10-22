@@ -21,10 +21,13 @@ class CompoConfigurable(ABC):
 
 
 class CompoConfig(CompoConfigurable):
+    save_json_file_name = 'compo.json'
+    protocol_version = 'v1'
 
     def __init__(self, config_dict: dict):
         self._configs = config_dict.copy()
         self.accessed_keys = set()
+        self._configs[f'{self._compo_config_prefix}.version'] = self.protocol_version
 
     def __getitem__(self, key):
         return self._configs[key]
@@ -33,19 +36,22 @@ class CompoConfig(CompoConfigurable):
         self._configs[key] = value
 
     @classmethod
-    def from_composer(cls, path:str = None):
-        config = configparser.ConfigParser(allow_no_value=True)
+    def from_composer(cls, path:str, **kwargs):
+        ini_config = configparser.ConfigParser(allow_no_value=True)
         assert os.path.exists(path), path
-        config.read(path)
+        ini_config.read(path)
 
-        # parse config file
+        # parse INI "source-of-default" config file
         config_dict = dict()
-        for section in config.sections():
-            items = config[section]
+        for section in ini_config.sections():
+            items = ini_config[section]
             for item_key in items:
                 key = f'{section}.{item_key}'
                 val = eval(items.get(item_key))
                 config_dict[key] = val
+
+        if v := kwargs.get('save_json_file_name', None):
+            cls.save_json_file_name = v
         return cls(config_dict)
 
     def composed(self, **inject_arguments):
@@ -90,25 +96,29 @@ class CompoConfig(CompoConfigurable):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.pretty_json()})"
 
-    def save_json_file(self, directory, fname='compo.json'):
+    def save_json_file(self, directory, fname=None):
+        fname = fname or self.save_json_file_name
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, fname), 'w') as fh:
             json.dump(self._configs, fh, indent=2, sort_keys=True)
 
-    def load_json_file(self, path='compo.json', warn_change_key_prefix='', ignore_keys=[]):
+    def load_json_file(self, path, warn_change_key_prefix='', ignore_keys=[]):
         with open(path, 'r') as fh:
             loaded_configs = json.load(fh)
         unexpected_changed_keys = []
-        for key, new_val in loaded_configs.items():
+        for key, load_val in loaded_configs.items():
             if key not in self._configs:
-                old_val = None
+                curr_val = None
             else:
-                old_val = self._configs[key]
-            if (old_val != new_val and
+                curr_val = self._configs[key]
+            if (curr_val != load_val and
                 key.startswith(warn_change_key_prefix) and
                 key not in ignore_keys):
-                logger.warn(f'changed key [{key}]: {old_val} -> {new_val}')
-                self._configs[key] = new_val
+                if key == f'{self._compo_config_prefix}.version':
+                    raise ValueError(f'Config version mismatch: {curr_val} -> {load_val}')
+                else:
+                    logger.warning(f'changed key [{key}]: {curr_val} -> {load_val}')
+                self._configs[key] = load_val
                 unexpected_changed_keys.append(key)
         return unexpected_changed_keys
 
