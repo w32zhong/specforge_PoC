@@ -2,10 +2,26 @@ import os
 import json
 import logging
 import configparser
+from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
-class CompoConfig:
+class CompoConfigurable(ABC):
+    _compo_config_prefix = __name__.removeprefix('compo.')
+
+    @classmethod
+    def from_composer_config(cls, config):
+        if cls._compo_config_prefix:
+            config = getattr(config, cls._compo_config_prefix)
+        return cls.from_composer(**config.dict())
+
+    @classmethod
+    @abstractmethod
+    def from_composer(cls, **kwargs): ...
+
+
+class CompoConfig(CompoConfigurable):
+
     def __init__(self, config_dict: dict):
         self._configs = config_dict.copy()
         self.accessed_keys = set()
@@ -17,7 +33,7 @@ class CompoConfig:
         self._configs[key] = value
 
     @classmethod
-    def from_config_file(cls, path: str):
+    def from_composer(cls, path:str = None):
         config = configparser.ConfigParser(allow_no_value=True)
         assert os.path.exists(path), path
         config.read(path)
@@ -34,7 +50,7 @@ class CompoConfig:
 
     def composed(self, **inject_arguments):
         used_inject_keys = set()
-        base_configs = self._configs.copy()
+        base_configs = self.dict()
 
         # pass#1: inject compositional keys
         base_compo_keys = list(filter(lambda k: '@' in k, base_configs.keys()))
@@ -64,6 +80,9 @@ class CompoConfig:
 
     def __getattr__(self, key):
         return _CompoConfigProxy(self, key)
+
+    def dict(self):
+        return self._configs.copy()
 
     def pretty_json(self):
         return json.dumps(self._configs, indent=2, sort_keys=True)

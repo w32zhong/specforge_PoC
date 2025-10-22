@@ -6,7 +6,7 @@ import tempfile
 class UnitTest(unittest.TestCase):
 
     def test1(self):
-        cfg = CompoConfig.from_config_file('./tests/configs.ini')
+        cfg = CompoConfig.from_composer('./tests/configs.ini')
         kwargs = {
             "@llama2_7b": True,
             "training.max_length": 128_000
@@ -42,6 +42,17 @@ class UnitTest(unittest.TestCase):
             "training.max_length": 128_000
         }
         composed_cfg = cfg.composed(**kwargs)
+
+    def test3(self):
+        cfg1 = CompoConfig.from_composer('./tests/configs.ini')
+        cfg2 = CompoConfig.from_composer_config(
+            CompoConfig({'config.path': './tests/configs.ini'})
+        )
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            cfg2.save_json_file(tempdir)
+            unexpected_keys = cfg1.load_json_file(f'{tempdir}/compo.json')
+        assert len(unexpected_keys) == 0
 
 
 if __name__ == '__main__':
