@@ -5,13 +5,17 @@ from compo import CompoConfigurable, CompoConfig
 
 class Qwen3Drafter(Qwen3Model, CompoConfigurable):
     @classmethod
-    def from_composer(cls, **kwargs):
-        print('DRAFT', kwargs)
+    def from_composer(cls, model_path, **kwargs):
+        return cls.from_pretrained(model_path, config=None)
 
 class Qwen3ForTargetCausalLM(Qwen3ForCausalLM, CompoConfigurable):
+    @property
+    def base_model(self):
+        return self.model
+
     @classmethod
-    def from_composer(cls, **kwargs):
-        print('TARGET', kwargs)
+    def from_composer(cls, model_path, **kwargs):
+        return cls.from_pretrained(model_path, config=None)
 
 
 #class Qwen3Drafter(Qwen3Model):
