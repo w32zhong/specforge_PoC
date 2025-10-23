@@ -29,13 +29,13 @@ class UnitTest(unittest.TestCase):
             unexpected_keys = cfg.load_json_file(f'{tempdir}/compo.json')
         assert len(unexpected_keys) == 5
 
-        assert not composed_cfg.train.dict()
-        assert not composed_cfg.training.non_exists.dict()
+        assert CompoConfig.resolve(composed_cfg.train) is None
+        assert CompoConfig.resolve(composed_cfg.training.non_exists) is None
         assert 'max_length' in composed_cfg.training.dict()
         assert getattr(composed_cfg, 'training').tf32 is False
 
-        composed_cfg.foo.bar = 'baz'
-        assert composed_cfg.foo.bar == 'baz'
+        composed_cfg.rock.paper = 'scissors'
+        assert composed_cfg.rock.paper == 'scissors'
 
     @unittest.expectedFailure
     def test2(self):
@@ -47,13 +47,14 @@ class UnitTest(unittest.TestCase):
         composed_cfg = cfg.composed(**kwargs)
 
     def test3(self):
+        tmp_cfg = CompoConfig({
+            'path': './tests/configs.ini',
+            'save_json_file_name': 'foo.json',
+        })
+        assert tmp_cfg.path == './tests/configs.ini'
+
         cfg1 = CompoConfig.from_composer('./tests/configs.ini')
-        cfg2 = CompoConfig.from_composer_config(
-            CompoConfig({
-                'config.path': './tests/configs.ini',
-                'config.save_json_file_name': 'foo.json',
-            })
-        )
+        cfg2 = CompoConfig.from_composer_config(tmp_cfg)
 
         with tempfile.TemporaryDirectory() as tempdir:
             cfg2.save_json_file(tempdir)
@@ -63,8 +64,8 @@ class UnitTest(unittest.TestCase):
     def test4(self):
         cfg = CompoConfig.from_composer_config(
             CompoConfig({
-                'config.path': './tests/configs.ini',
-                'config.save_json_file_name': 'foo.json',
+                'path': './tests/configs.ini',
+                'save_json_file_name': 'foo.json',
             })
         )
         with tempfile.TemporaryDirectory() as tempdir:
@@ -78,6 +79,14 @@ class UnitTest(unittest.TestCase):
                 assert isinstance(e, ValueError)
             else:
                 assert False
+
+    def test5(self):
+        cfg = CompoConfig.from_composer('./tests/configs.ini')
+        setattr(cfg, 'foo.bar', 'baz')
+        assert CompoConfig.resolve(cfg.foo.bar) is None
+
+        cfg._configs['foo.bar'] = 'baz'
+        assert CompoConfig.resolve(cfg.foo.bar) == 'baz'
 
 
 if __name__ == '__main__':

@@ -1,1 +1,1 @@
-from compo.config import CompoConfigurable
+from compo.config import CompoConfig, CompoConfigurable

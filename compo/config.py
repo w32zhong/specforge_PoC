@@ -1,5 +1,6 @@
 import os
 import json
+import inspect
 import logging
 import configparser
 from abc import ABC, abstractmethod
@@ -7,13 +8,28 @@ logger = logging.getLogger(__name__)
 
 
 class CompoConfigurable(ABC):
-    _compo_config_prefix = __name__.removeprefix('compo.')
-
     @classmethod
     def from_composer_config(cls, config):
-        if cls._compo_config_prefix:
-            config = getattr(config, cls._compo_config_prefix)
-        return cls.from_composer(**config.dict())
+        signature = inspect.signature(cls.from_composer)
+        params = signature.parameters.values()
+        all_param_names = set(param.name for param in params)
+        explicit_kwargs = {
+            param.name: getattr(config, param.name) for param in params
+            if param.kind != inspect.Parameter.VAR_KEYWORD
+        }
+        explicit_attrs = set(explicit_kwargs.keys())
+        yetpass_param_names = all_param_names - explicit_attrs
+        if len(yetpass_param_names) == 0:
+            kwargs = {}
+        elif len(yetpass_param_names) == 1:
+            leftover_attrs = CompoConfig.get_dict_attrs(config.dict()) - explicit_attrs
+            kwargs = {
+                attr: getattr(config, attr) for attr in leftover_attrs
+            }
+        else:
+            raise ValueError
+        kwargs.update(explicit_kwargs)
+        return cls.from_composer(**kwargs)
 
     @classmethod
     @abstractmethod
@@ -21,13 +37,14 @@ class CompoConfigurable(ABC):
 
 
 class CompoConfig(CompoConfigurable):
-    save_json_file_name = 'compo.json'
-    protocol_version = 'v1'
+    _config_version = 'v1'
+    _config_version_key = 'config.version'
+    _save_json_file_name = 'compo.json'
 
     def __init__(self, config_dict: dict):
         self._configs = config_dict.copy()
         self.accessed_keys = set()
-        self._configs[f'{self._compo_config_prefix}.version'] = self.protocol_version
+        self._configs[self._config_version_key] = self._config_version
 
     def __getitem__(self, key):
         return self._configs[key]
@@ -51,7 +68,7 @@ class CompoConfig(CompoConfigurable):
                 config_dict[key] = val
 
         if v := kwargs.get('save_json_file_name', None):
-            cls.save_json_file_name = v
+            cls._save_json_file_name = v
         return cls(config_dict)
 
     def composed(self, **inject_arguments):
@@ -85,7 +102,10 @@ class CompoConfig(CompoConfigurable):
         return CompoConfig(base_exact_configs)
 
     def __getattr__(self, key):
-        return _CompoConfigProxy(self, key)
+        if key in self._configs:
+            return self._configs[key]
+        else:
+            return _CompoConfigProxy(self, key)
 
     def dict(self):
         return self._configs.copy()
@@ -96,8 +116,22 @@ class CompoConfig(CompoConfigurable):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.pretty_json()})"
 
+    @staticmethod
+    def resolve(x):
+        if isinstance(x, _CompoConfigProxy) or isinstance(x, CompoConfig):
+            if d := x.dict():
+                return d
+            else:
+                return None
+        else:
+            return x
+
+    @staticmethod
+    def get_dict_attrs(d: dict):
+        return set(k.split('.')[0] for k in d.keys())
+
     def save_json_file(self, directory, fname=None):
-        fname = fname or self.save_json_file_name
+        fname = fname or self._save_json_file_name
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, fname), 'w') as fh:
             json.dump(self._configs, fh, indent=2, sort_keys=True)
@@ -114,7 +148,7 @@ class CompoConfig(CompoConfigurable):
             if (curr_val != load_val and
                 key.startswith(warn_change_key_prefix) and
                 key not in ignore_keys):
-                if key == f'{self._compo_config_prefix}.version':
+                if key == self._config_version_key:
                     raise ValueError(f'Config version mismatch: {curr_val} -> {load_val}')
                 else:
                     logger.warning(f'changed key [{key}]: {curr_val} -> {load_val}')
@@ -136,6 +170,7 @@ class _CompoConfigProxy:
             self._root.accessed_keys.add(full_key)
             return configs[full_key]
         else:
+            # allow long reach to a few non-existence fields
             return _CompoConfigProxy(self._root, full_key)
 
     def __setattr__(self, key, value):
@@ -145,7 +180,8 @@ class _CompoConfigProxy:
     def dict(self):
         configs = self._root._configs.copy()
         prefix = self._prefix + '.'
-        return {k.removeprefix(prefix): v for k, v in configs.items() if k.startswith(prefix)}
+        d = {k.removeprefix(prefix): v for k, v in configs.items() if k.startswith(prefix)}
+        return d.copy()
 
     def __repr__(self):
         pretty_print = json.dumps(self.dict(), indent=2)
