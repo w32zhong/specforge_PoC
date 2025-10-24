@@ -1,9 +1,10 @@
 from abc import abstractmethod
-from compo import CompoConfigurable, CompoConfig
-from compo.models import *
+from draco import CompoConfigurable, CompoConfig
+from draco.models import *
 
 
-class SpeculativeDecodingModelBase(CompoConfigurable):
+class SpeculativeDecodingModelBaseHF(CompoConfigurable):
+    _speculative_config_prefix = '_speculative_decoding_configs'
     _draft_model_path_prefix = '_draft_model'
 
     @property
@@ -47,11 +48,27 @@ class SpeculativeDecodingModelBase(CompoConfigurable):
             draft_model = DraftModel.from_composer_config(draft_model_config)
             base_model.set_draft_model(draft_model, draft_model_config)
 
+        # save runtime config
+        setattr(base_model, cls._speculative_config_prefix, dict(
+            target_model_config=target_model_config.dict(),
+            draft_model_config=draft_model_config.dict()
+        ))
+
         return base_model
 
     @classmethod
-    def from_pretrained(cls, model_path, config=None, **kwargs):
+    def from_pretrained(cls, path, config=None, **kwargs):
         model = super().from_pretrained(
-            model_path, config=config, **kwargs
+            path, config=config, **kwargs
+        )
+        return model
+
+    def save_pretrained(self, path, **kwargs):
+        config_dict = getattr(self, self._speculative_config_prefix, {})
+        config = CompoConfig(config_dict)
+        config.save_json_file(path)
+
+        model = self.draft_model.save_pretrained(
+            path, **kwargs
         )
         return model

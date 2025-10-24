@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoConfig
 from transformers.models.qwen3.modeling_qwen3 import *
-from compo import CompoConfigurable, CompoConfig
+from draco import CompoConfigurable, CompoConfig
 
 
 class Qwen3Drafter(Qwen3Model, CompoConfigurable):
@@ -10,7 +10,7 @@ class Qwen3Drafter(Qwen3Model, CompoConfigurable):
                       skip_first_input_layernorm=True, skip_output_norm=True, **kwargs):
         config = AutoConfig.from_pretrained(model_path)
         config.hidden_size = draft_hidden_size or config.hidden_size
-        config.num_hidden_layers = draft_layers
+        config.num_hidden_layers = draft_layers or config.num_hidden_layers
 
         torch_dtype = eval(kwargs.get('torch_dtype', 'None'))
         device_map = kwargs.get('device_map', None)

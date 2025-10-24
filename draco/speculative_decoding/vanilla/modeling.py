@@ -1,8 +1,8 @@
-from compo.models import *
-from compo.speculative_decoding.base import SpeculativeDecodingModelBase
+from draco.models import *
+from draco.speculative_decoding.base_hf import SpeculativeDecodingModelBaseHF
 
 
-class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBase):
+class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBaseHF):
 
     def configure(self, draft_depth=3, draft_beams=1, draft_topk=None, **kwargs):
         self.draft_depth = draft_depth
@@ -23,7 +23,8 @@ class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBase):
 
 
 if __name__ == '__main__':
-    from compo import CompoConfig
+    from draco import CompoConfig
     cfg = CompoConfig.from_composer('./configs_v2.ini')
     model = VanillaSpeculativeDecodingModel.from_composer_config(cfg.speculative_decoding)
+    model.save_pretrained('./output/temp_save')
     breakpoint()
