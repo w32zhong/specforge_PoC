@@ -1,6 +1,6 @@
 import unittest
-from compo.config import CompoConfig
 import tempfile
+from draco.config import CompoConfig
 
 
 class UnitTest(unittest.TestCase):
@@ -87,6 +87,26 @@ class UnitTest(unittest.TestCase):
 
         cfg._configs['foo.bar'] = 'baz'
         assert CompoConfig.resolve(cfg.foo.bar) == 'baz'
+
+    def test6(self):
+        cfg = CompoConfig({
+            "a": 1,
+            "b": {
+                "c": 2,
+                "d": {
+                    "e": 3
+                }
+            },
+            "f": {
+                "g": 4,
+                "h": 5
+            }
+        })
+        assert cfg.a == 1
+        assert cfg.b.c == 2
+        assert cfg.b.d.e == 3
+        assert cfg.f.g == 4
+        assert cfg.f.h == 5
 
 
 if __name__ == '__main__':

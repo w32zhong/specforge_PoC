@@ -42,9 +42,20 @@ class CompoConfig(CompoConfigurable):
     _save_json_file_name = 'compo.json'
 
     def __init__(self, config_dict: dict):
-        self._configs = config_dict.copy()
+        self._configs = self._flatten_recur_keys(config_dict.copy())
         self.accessed_keys = set()
         self._configs[self._config_version_key] = self._config_version
+
+    @staticmethod
+    def _flatten_recur_keys(d, prefix="", new_dict=None):
+        new_dict = new_dict if new_dict else {}
+        for key, value in d.items():
+            new_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                CompoConfig._flatten_recur_keys(value, new_key, new_dict)
+            else:
+                new_dict[new_key] = value
+        return new_dict
 
     def __getitem__(self, key):
         return self._configs[key]
