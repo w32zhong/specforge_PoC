@@ -1,23 +1,30 @@
 import torch
+import logging
 from transformers import AutoConfig
 from transformers.models.qwen3.modeling_qwen3 import *
 from draco import CompoConfigurable, CompoConfig
 
+logger = logging.getLogger(__name__)
+
 
 class Qwen3Drafter(Qwen3Model, CompoConfigurable):
     @classmethod
-    def from_composer(cls, model_path=None, draft_hidden_size=None, draft_layers=1,
+    def from_composer(cls, model_path=None, config_path=None,
+                      draft_hidden_size=None, draft_layers=1,
                       skip_first_input_layernorm=True, skip_output_norm=True, **kwargs):
-        config = AutoConfig.from_pretrained(model_path)
+        config = AutoConfig.from_pretrained(config_path)
         config.hidden_size = draft_hidden_size or config.hidden_size
         config.num_hidden_layers = draft_layers or config.num_hidden_layers
         config.skip_first_input_layernorm = skip_first_input_layernorm
         config.skip_output_norm = skip_output_norm
 
         torch_dtype = eval(kwargs.get('torch_dtype', 'None'))
-        device_map = kwargs.get('device_map', None)
-        drafter = cls.from_pretrained(model_path,
-                      config=config, torch_dtype=torch_dtype, device_map=device_map)
+        if model_path:
+            drafter = cls.from_pretrained(model_path,
+                          config=config, torch_dtype=torch_dtype, device_map='cpu')
+        else:
+            logger.warn('Loading randomly initialized draft model, you should train it!')
+            drafter = cls(config).to(dtype=torch_dtype, device='cpu')
 
         if skip_first_input_layernorm:
             layer = drafter.layers[0]

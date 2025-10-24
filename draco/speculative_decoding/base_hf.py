@@ -63,27 +63,46 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
 
     @classmethod
     def from_pretrained(cls, path, config=None, **kwargs):
-        breakpoint()
-        model = super().from_pretrained(
-            path, config=config, **kwargs
-        )
-        return model
+        # should be saved to these places if they are "save_pretrained" from this class.
+        config_file = os.path.join(path, cls._save_conf_fname)
+        draft_model_save_dir = os.path.join(path, cls._draft_model_save_subdir)
+
+        if os.path.exists(config_file):
+            configs = CompoConfig({})
+            configs.load_json_file(config_file, warn_change_key_prefix=None)
+            configs.draft_model_config.model_path = draft_model_save_dir
+            return cls.from_composer_config(configs)
+        else:
+            model = super().from_pretrained(
+                path, config=config, **kwargs
+            )
+            return model
 
     def save_pretrained(self, path, **kwargs):
-        # save composer config
+        # load runtime config
         config_dict = getattr(self, self._speculative_config_prefix, {})
         config = CompoConfig(config_dict)
-        config.save_json_file(path, fname=self._save_conf_fname)
-
-        # save target model
-        draft_model = self.draft_model 
-        if config.target_model_config.save_model:
-            setattr(self, self._draft_model_attr_prefix, None)
-            logger.info(f'Saving target model to {path} ...')
-            super().save_pretrained(path, **kwargs)
-            setattr(self, self._draft_model_attr_prefix, draft_model)
 
         # save draft model
         draft_model_save_dir = os.path.join(path, self._draft_model_save_subdir)
         logger.info(f'Saving draft model to {draft_model_save_dir} ...')
         self.draft_model.save_pretrained(draft_model_save_dir, **kwargs)
+
+        if draft_model_path := config.draft_model_config.model_path:
+            config.draft_model_config.origin_model_path = draft_model_path
+            config.draft_model_config.model_path = None
+
+        # save target model
+        if config.target_model_config.save_model:
+            save_draft_model = self.draft_model
+            setattr(self, self._draft_model_attr_prefix, None)
+            logger.info(f'Saving target model to {path} ...')
+            super().save_pretrained(path, **kwargs)
+            setattr(self, self._draft_model_attr_prefix, save_draft_model)
+
+            if target_model_path := config.target_model_config.model_path:
+                config.target_model_config.origin_model_path = target_model_path
+                config.target_model_config.model_path = None
+
+        # save composer config
+        config.save_json_file(path, fname=self._save_conf_fname)

@@ -160,15 +160,15 @@ class CompoConfig(CompoConfigurable):
                 curr_val = None
             else:
                 curr_val = self._configs[key]
-            if (curr_val != load_val and
-                key.startswith(warn_change_key_prefix) and
-                key not in ignore_keys):
+            if (curr_val != load_val and warn_change_key_prefix is not None
+                and key.startswith(warn_change_key_prefix)
+                and key not in ignore_keys):
                 if key == self._config_version_key:
                     raise ValueError(f'Config version mismatch: {curr_val} -> {load_val}')
                 else:
                     logger.warning(f'changed key [{key}]: {curr_val} -> {load_val}')
-                self._configs[key] = load_val
                 unexpected_changed_keys.append(key)
+            self._configs[key] = load_val
         return unexpected_changed_keys
 
 
