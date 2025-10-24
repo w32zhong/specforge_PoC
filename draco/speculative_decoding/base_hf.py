@@ -30,8 +30,8 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
         setattr(self, self._draft_model_attr_prefix, draft_model)
 
     @classmethod
-    def dynamic_typed_base_model(cls, target_model, draft_model_name='UnknownDrafter'):
-        TargetModel = eval(target_model.class_name)
+    def dynamic_typed_base_model(cls, target_model_config, draft_model_name='UnknownDrafter'):
+        TargetModel = eval(target_model_config.class_name)
         SpeculativeModel = type(
             f'{cls.__name__}.{TargetModel.__name__}.{draft_model_name}',
             (cls, TargetModel),
@@ -40,7 +40,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
                 'from_composer_config': classmethod(TargetModel.from_composer_config.__func__)
             }
         )
-        return SpeculativeModel.from_composer_config(target_model)
+        return SpeculativeModel.from_composer_config(target_model_config)
 
     @classmethod
     def from_composer(cls, target_model_config=None, draft_model_config=None, **kwargs):
@@ -92,7 +92,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
             config.draft_model_config.origin_model_path = draft_model_path
             config.draft_model_config.model_path = None
 
-        # save target model
+        # save target model (only if specified because target model is usually large)
         if config.target_model_config.save_model:
             save_draft_model = self.draft_model
             setattr(self, self._draft_model_attr_prefix, None)
