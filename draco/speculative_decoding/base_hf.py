@@ -10,7 +10,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
     _speculative_config_prefix = '_speculative_decoding_configs'
     _draft_model_attr_prefix = '_draft_model'
     _draft_model_save_subdir = 'draft_model'
-    _save_draco_conf_fname = 'draco.json'
+    _save_conf_fname = 'speculative_decoding.json'
 
     @property
     def draft_model(self):
@@ -73,7 +73,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
         # save composer config
         config_dict = getattr(self, self._speculative_config_prefix, {})
         config = CompoConfig(config_dict)
-        config.save_json_file(path, fname=self._save_draco_conf_fname)
+        config.save_json_file(path, fname=self._save_conf_fname)
 
         # save target model
         draft_model = self.draft_model 
