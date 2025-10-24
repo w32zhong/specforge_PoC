@@ -4,6 +4,7 @@ import inspect
 import logging
 import configparser
 from abc import ABC, abstractmethod
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,15 +48,17 @@ class CompoConfig(CompoConfigurable):
         self._configs[self._config_version_key] = self._config_version
 
     @staticmethod
-    def _flatten_recur_keys(d, prefix="", new_dict=None):
-        new_dict = new_dict if new_dict else {}
-        for key, value in d.items():
-            new_key = f"{prefix}.{key}" if prefix else key
-            if isinstance(value, dict):
-                CompoConfig._flatten_recur_keys(value, new_key, new_dict)
-            else:
-                new_dict[new_key] = value
-        return new_dict
+    def _flatten_recur_keys(d):
+        new_dict = dict()
+        def recur(sub_dict, prefix=""):
+            for key, value in sub_dict.items():
+                new_key = f"{prefix}.{key}" if prefix else key
+                if isinstance(value, dict):
+                    recur(value, new_key)
+                else:
+                    new_dict[new_key] = value
+            return new_dict
+        return recur(d)
 
     def __getitem__(self, key):
         return self._configs[key]
@@ -146,6 +149,7 @@ class CompoConfig(CompoConfigurable):
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, fname), 'w') as fh:
             json.dump(self._configs, fh, indent=2, sort_keys=True)
+            fh.write('\n')
 
     def load_json_file(self, path, warn_change_key_prefix='', ignore_keys=[]):
         with open(path, 'r') as fh:
@@ -193,6 +197,9 @@ class _CompoConfigProxy:
         prefix = self._prefix + '.'
         d = {k.removeprefix(prefix): v for k, v in configs.items() if k.startswith(prefix)}
         return d.copy()
+
+    def __bool__(self):
+        return CompoConfig.resolve(self) is not None
 
     def __repr__(self):
         pretty_print = json.dumps(self.dict(), indent=2)

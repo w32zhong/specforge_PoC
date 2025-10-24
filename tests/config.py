@@ -29,8 +29,11 @@ class UnitTest(unittest.TestCase):
             unexpected_keys = cfg.load_json_file(f'{tempdir}/compo.json')
         assert len(unexpected_keys) == 5
 
+        if composed_cfg.train: assert False
         assert CompoConfig.resolve(composed_cfg.train) is None
+        if composed_cfg.training.non_exists: assert False
         assert CompoConfig.resolve(composed_cfg.training.non_exists) is None
+
         assert 'max_length' in composed_cfg.training.dict()
         assert getattr(composed_cfg, 'training').tf32 is False
 

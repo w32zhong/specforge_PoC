@@ -11,6 +11,8 @@ class Qwen3Drafter(Qwen3Model, CompoConfigurable):
         config = AutoConfig.from_pretrained(model_path)
         config.hidden_size = draft_hidden_size or config.hidden_size
         config.num_hidden_layers = draft_layers or config.num_hidden_layers
+        config.skip_first_input_layernorm = skip_first_input_layernorm
+        config.skip_output_norm = skip_output_norm
 
         torch_dtype = eval(kwargs.get('torch_dtype', 'None'))
         device_map = kwargs.get('device_map', None)

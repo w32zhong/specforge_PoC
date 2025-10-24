@@ -23,7 +23,12 @@ class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBaseHF):
 
 if __name__ == '__main__':
     from draco import CompoConfig
-    cfg = CompoConfig.from_composer('./configs_v2.ini')
+    import logging
+    logger = logging.getLogger('draco.speculative_decoding.base_hf')
+    logger.setLevel(logging.INFO)
+    cfg = CompoConfig.from_composer('./default.ini')
     model = VanillaSpeculativeDecodingModel.from_composer_config(cfg.speculative_decoding)
     model.save_pretrained('./output/temp_save')
+
+    model = VanillaSpeculativeDecodingModel.from_pretrained('./output/temp_save')
     breakpoint()

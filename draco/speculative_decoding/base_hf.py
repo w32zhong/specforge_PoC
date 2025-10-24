@@ -1,14 +1,20 @@
+import os
+import logging
 from draco import CompoConfigurable, CompoConfig
 from draco.models import *
+
+logger = logging.getLogger(__name__)
 
 
 class SpeculativeDecodingModelBaseHF(CompoConfigurable):
     _speculative_config_prefix = '_speculative_decoding_configs'
-    _draft_model_path_prefix = '_draft_model'
+    _draft_model_attr_prefix = '_draft_model'
+    _draft_model_save_subdir = 'draft_model'
+    _save_draco_conf_fname = 'draco.json'
 
     @property
     def draft_model(self):
-        return getattr(self, self._draft_model_path_prefix)
+        return getattr(self, self._draft_model_attr_prefix)
 
     def set_draft_model(self, draft_model, draft_model_config):
         draft_device = CompoConfig.resolve(draft_model_config.device)
@@ -21,7 +27,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
         else:
             draft_model.to(self.base_model.device)
 
-        setattr(self, self._draft_model_path_prefix, draft_model)
+        setattr(self, self._draft_model_attr_prefix, draft_model)
 
     @classmethod
     def dynamic_typed_base_model(cls, target_model, draft_model_name='UnknownDrafter'):
@@ -57,17 +63,27 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
 
     @classmethod
     def from_pretrained(cls, path, config=None, **kwargs):
+        breakpoint()
         model = super().from_pretrained(
             path, config=config, **kwargs
         )
         return model
 
     def save_pretrained(self, path, **kwargs):
+        # save composer config
         config_dict = getattr(self, self._speculative_config_prefix, {})
         config = CompoConfig(config_dict)
-        config.save_json_file(path)
+        config.save_json_file(path, fname=self._save_draco_conf_fname)
 
-        model = self.draft_model.save_pretrained(
-            path, **kwargs
-        )
-        return model
+        # save target model
+        draft_model = self.draft_model 
+        if config.target_model_config.save_model:
+            setattr(self, self._draft_model_attr_prefix, None)
+            logger.info(f'Saving target model to {path} ...')
+            super().save_pretrained(path, **kwargs)
+            setattr(self, self._draft_model_attr_prefix, draft_model)
+
+        # save draft model
+        draft_model_save_dir = os.path.join(path, self._draft_model_save_subdir)
+        logger.info(f'Saving draft model to {draft_model_save_dir} ...')
+        self.draft_model.save_pretrained(draft_model_save_dir, **kwargs)
