@@ -1,12 +1,34 @@
 import torch
+from transformers import AutoConfig
 from transformers.models.qwen3.modeling_qwen3 import *
 from compo import CompoConfigurable, CompoConfig
 
 
 class Qwen3Drafter(Qwen3Model, CompoConfigurable):
     @classmethod
-    def from_composer(cls, model_path, **kwargs):
-        return cls.from_pretrained(model_path, config=None)
+    def from_composer(cls, model_path=None, draft_hidden_size=None, draft_layers=1,
+                      skip_first_input_layernorm=True, skip_output_norm=True, **kwargs):
+        config = AutoConfig.from_pretrained(model_path)
+        config.hidden_size = draft_hidden_size or config.hidden_size
+        config.num_hidden_layers = draft_layers
+
+        torch_dtype = eval(kwargs.get('torch_dtype', 'None'))
+        device_map = kwargs.get('device_map', None)
+        drafter = cls.from_pretrained(model_path,
+                      config=config, torch_dtype=torch_dtype, device_map=device_map)
+
+        if skip_first_input_layernorm:
+            layer = drafter.layers[0]
+            delattr(layer, 'input_layernorm')
+            layer.input_layernorm = torch.nn.Identity()
+
+        if skip_output_norm:
+            delattr(drafter, 'norm')
+            drafter.norm = torch.nn.Identity()
+
+        delattr(drafter, 'embed_tokens')
+        return drafter
+
 
 class Qwen3ForTargetCausalLM(Qwen3ForCausalLM, CompoConfigurable):
     @property
@@ -15,30 +37,12 @@ class Qwen3ForTargetCausalLM(Qwen3ForCausalLM, CompoConfigurable):
 
     @classmethod
     def from_composer(cls, model_path, **kwargs):
-        return cls.from_pretrained(model_path, config=None)
+        torch_dtype = eval(kwargs.get('torch_dtype', 'None'))
+        device_map = kwargs.get('device_map', None)
+        return cls.from_pretrained(model_path,
+                   config=None, torch_dtype=torch_dtype, device_map=device_map)
 
 
-#class Qwen3Drafter(Qwen3Model):
-#    def __init__(self, draft_config, base_model):
-#        draft_config.num_hidden_layers = base_model.config.draft_layers
-#        draft_config.hidden_size = base_model.get_hidden_size()
-#        super().__init__(draft_config)
-#
-#        if base_model.config.skip_first_input_layernorm:
-#            layer = self.layers[0]
-#            delattr(layer, 'input_layernorm')
-#            layer.input_layernorm = torch.nn.Identity()
-#
-#        if base_model.config.skip_output_norm:
-#            delattr(self, 'norm')
-#            self.norm = torch.nn.Identity()
-#
-#        delattr(self, 'embed_tokens')
-#
-#    def get_hidden_size(self):
-#        return self.config.hidden_size
-#
-#
 #class SpeculativeQwen3ForCausalLM(SpecForgeLM, Qwen3ForCausalLM):
 #    @property
 #    def base_model(self):
