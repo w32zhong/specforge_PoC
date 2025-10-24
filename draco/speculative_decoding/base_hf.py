@@ -1,4 +1,3 @@
-from abc import abstractmethod
 from draco import CompoConfigurable, CompoConfig
 from draco.models import *
 

@@ -3,7 +3,6 @@ from draco.speculative_decoding.base_hf import SpeculativeDecodingModelBaseHF
 
 
 class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBaseHF):
-
     def configure(self, draft_depth=3, draft_beams=1, draft_topk=None, **kwargs):
         self.draft_depth = draft_depth
         self.draft_beams = draft_beams
