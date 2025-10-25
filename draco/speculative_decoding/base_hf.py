@@ -62,13 +62,20 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
             draft_model = DraftModel.from_composer_config(draft_model_config)
             base_model.set_draft_model(draft_model, draft_model_config)
 
-        # save runtime config
-        setattr(base_model, cls._speculative_config_prefix, dict(
+        # save runtime config for later save_pretrained()
+        base_model.configs_to_save(
             target_model_config=target_model_config.dict(),
             draft_model_config=draft_model_config.dict()
-        ))
+        )
 
         return base_model
+
+    def configs_to_save(self, **kwargs):
+        if d := getattr(self, self._speculative_config_prefix, {}):
+            d.update(kwargs)
+        else:
+            setattr(self, self._speculative_config_prefix, kwargs)
+        return d
 
     @classmethod
     def from_pretrained(cls, path, config=None, **kwargs):
@@ -89,8 +96,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
 
     def save_pretrained(self, path, **kwargs):
         # load runtime config
-        config_dict = getattr(self, self._speculative_config_prefix, {})
-        config = CompoConfig(config_dict)
+        config = CompoConfig(self.configs_to_save())
 
         # save draft model
         draft_model_save_dir = os.path.join(path, self._draft_model_save_subdir)

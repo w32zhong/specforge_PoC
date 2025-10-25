@@ -11,6 +11,8 @@ class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBaseHF):
     @classmethod
     def from_composer(cls, target_model_config, draft_model_config, algorithm_config):
         model = super().from_composer(target_model_config, draft_model_config)
-        model.configure(**algorithm_config.dict())
+        model.configure(
+            **model.configs_to_save(algorithm_config=algorithm_config.dict())
+        )
         return model
 

@@ -24,4 +24,6 @@ class UnitTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
             model = VanillaSpeculativeDecodingModel.from_pretrained(tempdir)
+            print(model.configs_to_save())
         assert len(model.draft_model.layers) == 1
+        assert hasattr(model, 'draft_depth')
