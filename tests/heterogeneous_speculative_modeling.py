@@ -9,6 +9,7 @@ class UnitTest(unittest.TestCase):
     def test1(self):
         cfg = CompoConfig({})
         cfg.load_json_file('tests/heterogeneous_speculative_modeling.json', warn_change_key_prefix=None)
+        cfg.algorithm_config.draft_depth = 2
         print(cfg)
 
         logger = logging.getLogger('draco.speculative_decoding.base_hf')

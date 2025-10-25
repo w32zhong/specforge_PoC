@@ -9,14 +9,8 @@ class VanillaSpeculativeDecodingModel(SpeculativeDecodingModelBaseHF):
         self.draft_topk = draft_depth if draft_topk is None else draft_topk
 
     @classmethod
-    def from_composer(cls,
-                      target_model_config=None,
-                      draft_model_config=None,
-                      algorithm_config=None, **kwargs):
-        model = super().from_composer(
-            target_model_config=target_model_config,
-            draft_model_config=draft_model_config
-        )
+    def from_composer(cls, target_model_config, draft_model_config, algorithm_config):
+        model = super().from_composer(target_model_config, draft_model_config)
         model.configure(**algorithm_config.dict())
         return model
 

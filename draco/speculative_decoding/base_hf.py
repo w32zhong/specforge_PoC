@@ -52,7 +52,7 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
         return SpeculativeModel.from_composer_config(target_model_config)
 
     @classmethod
-    def from_composer(cls, target_model_config=None, draft_model_config=None, **kwargs):
+    def from_composer(cls, target_model_config, draft_model_config):
         # bind to target model as the base model
         base_model = cls.dynamic_typed_base_model(target_model_config, draft_model_config.class_name)
 

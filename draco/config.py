@@ -12,25 +12,31 @@ class CompoConfigurable(ABC):
     @classmethod
     def from_composer_config(cls, config):
         signature = inspect.signature(cls.from_composer)
-        params = signature.parameters.values()
-        all_param_names = set(param.name for param in params)
-        explicit_kwargs = {
-            param.name: getattr(config, param.name) for param in params
-            if param.kind != inspect.Parameter.VAR_KEYWORD
-        }
-        explicit_attrs = set(explicit_kwargs.keys())
-        yetpass_param_names = all_param_names - explicit_attrs
-        if len(yetpass_param_names) == 0:
-            kwargs = {}
-        elif len(yetpass_param_names) == 1:
-            leftover_attrs = CompoConfig.get_dict_attrs(config.dict()) - explicit_attrs
-            kwargs = {
-                attr: getattr(config, attr) for attr in leftover_attrs
+        args, kwargs = [], dict()
+        passing_kwargs, allow_extra_kwargs = False, False
+        for param in signature.parameters.values():
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                allow_extra_kwargs = True
+                break
+            elif not param.default is inspect.Parameter.empty:
+                passing_kwargs = True
+
+            key, value = param.name, getattr(config, param.name)
+            if passing_kwargs:
+                kwargs[key] = value
+            else:
+                args.append(value)
+
+        if allow_extra_kwargs:
+            config_keys = CompoConfig.get_dict_attrs(config.dict())
+            expect_keys = set(param.name for param in signature.parameters.values())
+            leftover_keys = config_keys - expect_keys
+            extra_kwargs = {
+                key: getattr(config, key) for key in leftover_keys
             }
         else:
-            raise ValueError
-        kwargs.update(explicit_kwargs)
-        return cls.from_composer(**kwargs)
+            extra_kwargs = {}
+        return cls.from_composer(*args, **kwargs, **extra_kwargs)
 
     @classmethod
     @abstractmethod
