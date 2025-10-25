@@ -21,18 +21,19 @@ class CompoConfigurable(ABC):
             elif not param.default is inspect.Parameter.empty:
                 passing_kwargs = True
 
-            key, value = param.name, getattr(config, param.name)
+            value = getattr(config, param.name)
             if passing_kwargs:
-                kwargs[key] = value
+                kwargs[param.name] = value
             else:
                 args.append(value)
 
+        expect_keys = set(param.name for param in signature.parameters.values())
         if allow_extra_kwargs:
             config_keys = CompoConfig.get_dict_attrs(config.dict())
-            expect_keys = set(param.name for param in signature.parameters.values())
             leftover_keys = config_keys - expect_keys
             extra_kwargs = {
-                key: getattr(config, key) for key in leftover_keys
+                key: getattr(config, key)
+                for key in leftover_keys
             }
         else:
             extra_kwargs = {}
@@ -191,7 +192,7 @@ class _CompoConfigProxy:
             self._root.accessed_keys.add(full_key)
             return configs[full_key]
         else:
-            # allow long reach to a few non-existence fields
+            # allow reaching to non-existence fields
             return _CompoConfigProxy(self._root, full_key)
 
     def __setattr__(self, key, value):
