@@ -2,7 +2,7 @@ import torch
 import logging
 from transformers import AutoConfig
 from transformers.models.qwen3.modeling_qwen3 import *
-from draco import CompoConfigurable, CompoConfig
+from draco.config import CompoConfigurable, CompoConfig
 
 logger = logging.getLogger(__name__)
 

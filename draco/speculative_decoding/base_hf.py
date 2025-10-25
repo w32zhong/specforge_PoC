@@ -1,6 +1,6 @@
 import os
 import logging
-from draco import CompoConfigurable, CompoConfig
+from draco.config import CompoConfigurable, CompoConfig
 from draco.models import *
 
 logger = logging.getLogger(__name__)

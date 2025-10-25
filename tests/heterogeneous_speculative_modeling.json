@@ -1,0 +1,16 @@
+{
+  "config.version": "v1",
+  "draft_model_config.class_name": "Qwen3Drafter",
+  "draft_model_config.config_path": "Qwen/Qwen3-4B-Instruct-2507",
+  "draft_model_config.device": "cpu",
+  "draft_model_config.draft_hidden_size": null,
+  "draft_model_config.draft_layers": 1,
+  "draft_model_config.skip_first_input_layernorm": true,
+  "draft_model_config.skip_output_norm": true,
+  "draft_model_config.torch_dtype": "torch.bfloat16",
+  "target_model_config.class_name": "Qwen3ForTargetCausalLM",
+  "target_model_config.device_map": "cpu",
+  "target_model_config.model_path": "Qwen/Qwen3-4B-Instruct-2507",
+  "target_model_config.save_model": false,
+  "target_model_config.torch_dtype": "torch.bfloat16"
+}
