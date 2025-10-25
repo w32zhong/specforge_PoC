@@ -21,7 +21,7 @@ class CompoConfigurable(ABC):
             elif not param.default is inspect.Parameter.empty:
                 passing_kwargs = True
 
-            value = getattr(config, param.name)
+            value = CompoConfig.resolve(getattr(config, param.name), weak=True)
             if passing_kwargs:
                 kwargs[param.name] = value
             else:
@@ -32,7 +32,7 @@ class CompoConfigurable(ABC):
             config_keys = CompoConfig.get_dict_attrs(config.dict())
             leftover_keys = config_keys - expect_keys
             extra_kwargs = {
-                key: getattr(config, key)
+                key: CompoConfig.resolve(getattr(config, key), weak=True)
                 for key in leftover_keys
             }
         else:
@@ -124,6 +124,7 @@ class CompoConfig(CompoConfigurable):
 
     def __getattr__(self, key):
         if key in self._configs:
+            self.accessed_keys.add(key)
             return self._configs[key]
         else:
             return _CompoConfigProxy(self, key)
@@ -138,10 +139,10 @@ class CompoConfig(CompoConfigurable):
         return f"{self.__class__.__name__}({self.pretty_json()})"
 
     @staticmethod
-    def resolve(x):
+    def resolve(x, weak=False):
         if isinstance(x, _CompoConfigProxy) or isinstance(x, CompoConfig):
             if d := x.dict():
-                return d
+                return x if weak else d
             else:
                 return None
         else:
