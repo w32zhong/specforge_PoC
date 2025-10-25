@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
-class TargetModelBase(Protocol):
+class TargetModelProtocol(Protocol):
     @property
     def target_model(self): ...
 
@@ -39,7 +39,9 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
     @classmethod
     def dynamic_typed_base_model(cls, target_model_config, draft_model_name='UnknownDrafter'):
         TargetModel = eval(target_model_config.class_name)
-        assert isinstance(TargetModel, TargetModelBase), f'{TargetModel} incompatible as a target model!'
+        assert isinstance(TargetModel, TargetModelProtocol), (
+            f'{TargetModel} incompatible as a target model!'
+        )
 
         SpeculativeModel = type(
             f'{cls.__name__}.{TargetModel.__name__}.{draft_model_name}',
