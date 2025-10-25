@@ -1,9 +1,16 @@
 import os
 import logging
+from typing import runtime_checkable, Protocol
 from draco.config import CompoConfigurable, CompoConfig
 from draco.models import *
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class TargetModelBase(Protocol):
+    @property
+    def target_model(self): ...
 
 
 class SpeculativeDecodingModelBaseHF(CompoConfigurable):
@@ -25,13 +32,15 @@ class SpeculativeDecodingModelBaseHF(CompoConfigurable):
         elif draft_device:
             draft_model.to(draft_device)
         else:
-            draft_model.to(self.base_model.device)
+            draft_model.to(self.target_model.device)
 
         setattr(self, self._draft_model_attr_prefix, draft_model)
 
     @classmethod
     def dynamic_typed_base_model(cls, target_model_config, draft_model_name='UnknownDrafter'):
         TargetModel = eval(target_model_config.class_name)
+        assert isinstance(TargetModel, TargetModelBase), f'{TargetModel} incompatible as a target model!'
+
         SpeculativeModel = type(
             f'{cls.__name__}.{TargetModel.__name__}.{draft_model_name}',
             (cls, TargetModel),

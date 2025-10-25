@@ -41,7 +41,7 @@ class Qwen3Drafter(Qwen3Model, CompoConfigurable):
 
 class Qwen3ForTargetCausalLM(Qwen3ForCausalLM, CompoConfigurable):
     @property
-    def base_model(self):
+    def target_model(self):
         return self.model
 
     @classmethod
