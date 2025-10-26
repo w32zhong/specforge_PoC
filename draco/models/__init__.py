@@ -1,4 +1,4 @@
-#SGL_MODELS = []
+SGL_MODELS = []
 #
 #from .algorithms.eagle_v2 import EagleV2
 #

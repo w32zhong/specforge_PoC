@@ -1,6 +1,6 @@
 import json
 from colorama import Fore, Style
-from specforge_het.models import *
+from draco.models import *
 
 
 #################################

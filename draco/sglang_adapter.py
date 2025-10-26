@@ -1,7 +1,7 @@
 import os
 from transformers import AutoConfig
-from specforge_het.models import *
-from specforge_het.model_load import local_model_path
+from draco.models import *
+from draco.model_load import local_model_path
 from sglang.srt.models.registry import ModelRegistry
 
 # Calling tqdm.tqdm.set_lock(threading.RLock()) pre-populates _lock

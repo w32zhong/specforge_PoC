@@ -10,9 +10,9 @@ from sglang.srt.server_args import ServerArgs
 from sglang.srt.entrypoints.http_server import launch_server
 from sglang.srt.utils import kill_process_tree
 
-import specforge_het.sglang_adapter as sgl_adapter
-from specforge_het.sglang_adapter_utils import run_mtbench
-from specforge_het.sys_prompts import sys_prompt_lib
+import draco.sglang_adapter as sgl_adapter
+from draco.sglang_adapter_utils import run_mtbench
+from draco.chat_templates.sys_prompts import sys_prompt_lib
 
 
 class LoopRunner:
@@ -286,10 +286,13 @@ def server_mode():
     parser = argparse.ArgumentParser()
     ServerArgs.add_cli_args(parser)
     raw_args = parser.parse_args(sys.argv[2:]) # skip <script name> and <Fire mode>
-    if raw_args.speculative_draft_model_path is None:
+
+    if (raw_args.speculative_algorithm is not None
+        and raw_args.speculative_draft_model_path is None):
         base_model_path, draft_model_path = sgl_adapter.adapted(raw_args.model_path)
         raw_args.model_path = base_model_path
         raw_args.speculative_draft_model_path = draft_model_path
+
     server_args = ServerArgs.from_cli_args(raw_args)
     try:
         launch_server(server_args)

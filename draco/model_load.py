@@ -8,11 +8,11 @@ import safetensors
 from huggingface_hub import hf_hub_download, snapshot_download
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 
-from specforge_het.models import *
-from specforge_het.utils import master_print, get_num_parameters
+from draco.models import *
+#from draco.utils import master_print, get_num_parameters
 
-master_print(transformers.__path__)
-master_print(transformers.__version__)
+#master_print(transformers.__path__)
+#master_print(transformers.__version__)
 
 
 def local_model_path(model_path):
