@@ -32,15 +32,17 @@ for model_path in $MODEL_PATHS; do
         tmux new-session -d -s $session_ID -- bash -c "
           (flock 200;
             CUDA_VISIBLE_DEVICES=$dev \
-            python -m demo.sglang_inference engine_mode --bs $bs \
+            python -m demo.sglang_inference engine_mode \
               --mtbench question.jsonl${DATA_RANGE} \
               --outfile ./output/$session_ID.log \
-              --max_new_tokens 2048 \
+              --disable_outfile_overwrite \
+              --bs $bs --max_new_tokens 2048 \
               --dtype bfloat16 \
               --disable_cuda_graph $disable_cuda_graph \
               --speculative_algorithm EAGLE --speculative_tree $tree \
               $model_path;
-	   flock --unlock 200) 200>gpu${dev}.lock
+              echo 'unlocking...'
+              flock --unlock 200) 200>gpu${dev}.lock
         "
         set +x
       done
