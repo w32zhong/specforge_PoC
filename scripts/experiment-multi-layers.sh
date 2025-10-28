@@ -33,8 +33,8 @@ for model_path in $MODEL_PATHS; do
           fi
           session=$model_path-bs$bs-$tree-CG$disable_cuda_graph-tp$tp_size
           session=$(experiment_sanitize $session)
-          if tmux has-session -t $session; then
-            echo "session exists: $session"; continue
+          if tmux has-session -t "exp_$session"; then
+            echo "session exists: exp_$session"; continue
           fi
           experiment_session $session \
             "(flock 200; CUDA_VISIBLE_DEVICES=$devices \

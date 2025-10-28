@@ -60,7 +60,7 @@ experiment_argparse() {
 
 experiment_session() {
 	session_id=exp_${1-experiment}; shift 1
-	if ! tmux has-session -t $session_id; then
+	if ! tmux has-session -t "$session_id" 2>/dev/null; then
 		tmux new-session -c `pwd` -s $session_id -d
 	fi
 	tput bold setaf 3; echo -n "[$session_id] "; tput sgr0
