@@ -24,6 +24,8 @@ experiment_help() {
 	* To inspect a session:            tmux capture-pane -pt <session>
 	* To list all sessions:            tmux list-sessions -F '#S' -f "#{m:<session prefix>*,#S}"
 	* Pipe above to kill all sessions: | xargs -n 1 tmux kill-session -t
+	* Pipe above to peek all sessions: | xargs -I{} bash -c "echo [[{}]]; tmux capture-pane -pt {} | tail -5"
+	* To count and watch sessions:     watch 'tmux list-sessions | wc -l; tmux list-sessions'
 EOF
 }
 
