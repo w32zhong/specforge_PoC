@@ -22,6 +22,7 @@ for model_path in $MODEL_PATHS; do
     for tree in 6,10,60 3,1,4; do
       for disable_cuda_graph in True False; do
         dev=$((cnt % $TOTAL_GPUS))
+        let "cnt += 1"
         session_ID=$model_path-bs$bs-$tree-$disable_cuda_graph
         if tmux has-session -t $session_ID; then
           echo "session exists: $session_ID"
@@ -39,7 +40,6 @@ for model_path in $MODEL_PATHS; do
             --speculative_algorithm EAGLE --speculative_tree $tree \
             $model_path; $SHELL"
         set +x
-        let "cnt += 1"
       done
     done
   done
@@ -59,3 +59,9 @@ done
 #    set +x
 #    let "cnt += 1"
 #done
+
+##### Tips to manage sessions #####
+# To kill all sessions by PIDs: pkill -f $HGF_USER
+# To inspect a session: tmux capture-pane -pt <session_ID>
+# To list all sessions: tmux list-sessions -F '#S' -f "#{m:$HGF_USER*,#S}"
+# Pipe above to kill sessions: | xargs -n 1 tmux kill-session -t
