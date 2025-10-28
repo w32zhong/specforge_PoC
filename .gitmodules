@@ -2,7 +2,3 @@
 	path = eagle_v2
 	url = https://github.com/w32zhong/EAGLE-fork.git
 	branch = v2
-[submodule "eagle_v3"]
-	path = eagle_v3
-	url = https://github.com/w32zhong/EAGLE-fork.git
-	branch = v3
