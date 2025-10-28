@@ -150,9 +150,9 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
     skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False,
     sys_prompt=None, mtbench_use_sgl_chat_template=False, hard_exit=False,
-    disable_outfile_overwrite=False):
+    disallow_outfile_overwrite=False):
 
-    if disable_outfile_overwrite and os.path.exists(outfile):
+    if disallow_outfile_overwrite and os.path.exists(outfile):
         return
 
     if draft_model is None:

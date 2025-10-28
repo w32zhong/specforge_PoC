@@ -1,5 +1,5 @@
 HGF_USER=w32zhong
-TOTAL_GPUS=8
+TOTAL_GPUS=1
 DATA_RANGE= #:1
 
 MODELS="$MODELS blooming-silence-78 laced-wood-90 trim-waterfall-88"
@@ -18,7 +18,7 @@ set -e
 cnt=0
 
 for model_path in $MODEL_PATHS; do
-  for bs in 1 4 8 16 32; do
+  for bs in 1 4 8 16; do
     for tree in 6,10,60 3,1,4; do
       for disable_cuda_graph in True False; do
         dev=$((cnt % $TOTAL_GPUS))
@@ -31,20 +31,22 @@ for model_path in $MODEL_PATHS; do
         set -x
         tmux new-session -d -s $session_ID -- bash -c "
           (flock 200;
-            CUDA_VISIBLE_DEVICES=$dev \
+            CUDA_VISIBLE_DEVICES=0,1,2,3 \
             python -m demo.sglang_inference engine_mode \
               --mtbench question.jsonl${DATA_RANGE} \
               --outfile ./output/$session_ID.log \
-              --disable_outfile_overwrite \
+              --disallow_outfile_overwrite \
               --bs $bs --max_new_tokens 2048 \
-              --dtype bfloat16 \
+              --dtype bfloat16 --tp_size 4 \
               --disable_cuda_graph $disable_cuda_graph \
               --speculative_algorithm EAGLE --speculative_tree $tree \
               $model_path;
               echo 'unlocking...'
-              flock --unlock 200) 200>gpu${dev}.lock
+              flock --unlock 200) 200>gpu${dev}.lock;
+          exec $SHELL
         "
         set +x
+        #exit
       done
     done
   done
