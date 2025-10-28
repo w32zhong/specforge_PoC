@@ -1,6 +1,7 @@
 HGF_USER=w32zhong
 TOTAL_GPUS=1
 DATA_RANGE= #:1
+SESSION_EXEC=true
 
 MODELS="$MODELS blooming-silence-78 laced-wood-90 trim-waterfall-88"
 MODELS="$MODELS silvery-planet-91 royal-breeze-92 lemon-hill-93"
@@ -18,9 +19,9 @@ set -e
 cnt=0
 
 for model_path in $MODEL_PATHS; do
-  for bs in 1 4 8 16; do
+  for bs in 1 4 8; do
     for tree in 6,10,60 3,1,4; do
-      for disable_cuda_graph in True False; do
+      for disable_cuda_graph in False; do
         dev=$((cnt % $TOTAL_GPUS))
         let "cnt += 1"
         session_ID=$model_path-bs$bs-$tree-$disable_cuda_graph
@@ -43,7 +44,7 @@ for model_path in $MODEL_PATHS; do
               $model_path;
               echo 'unlocking...'
               flock --unlock 200) 200>gpu${dev}.lock;
-          exec $SHELL
+          exec $SESSION_EXEC
         "
         set +x
         #exit
