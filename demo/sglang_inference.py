@@ -149,7 +149,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     temperature=0, speculative_algorithm=None, speculative_tree=(6, 10, 60),
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
     skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False,
-    sys_prompt=None, mtbench_use_sgl_chat_template=False):
+    sys_prompt=None, mtbench_use_sgl_chat_template=False, hard_exit=True):
 
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
@@ -270,6 +270,12 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     for key, val in metrics.items():
         print(f'{key:>30}:', val)
 
+    if hard_exit:
+        kill_process_tree(os.getpid(), include_parent=False)
+    else:
+        loop_runner.shutdown()
+        llm.shutdown()
+
     if outfile is not None:
         with open(outfile, 'a') as fh:
             j = json.dumps(dict(
@@ -277,9 +283,6 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
                     **metrics
                 ), sort_keys=True)
             print(j, file=fh)
-
-    loop_runner.shutdown()
-    llm.shutdown()
 
 
 def server_mode():

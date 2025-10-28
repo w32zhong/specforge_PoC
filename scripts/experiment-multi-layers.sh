@@ -13,7 +13,7 @@ for model in $MODELS; do
   MODEL_PATHS="$MODEL_PATHS $HGF_USER/$model"
 done
 
-rm -f gpu*.log gpu*.lock
+rm -f gpu*.lock
 set -e
 cnt=0
 
@@ -33,7 +33,7 @@ for model_path in $MODEL_PATHS; do
         "CUDA_VISIBLE_DEVICES=$dev flock gpu${dev}.lock \
           python -m demo.sglang_inference engine_mode --bs $bs \
             --mtbench question.jsonl${DATA_RANGE} \
-            --outfile ./gpu${dev}.log \
+            --outfile ./output/$session_ID.log \
             --max_new_tokens 2048 \
             --dtype bfloat16 \
             --disable_cuda_graph $disable_cuda_graph \
