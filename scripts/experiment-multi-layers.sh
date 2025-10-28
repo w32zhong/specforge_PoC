@@ -1,7 +1,10 @@
-HGF_USER=w32zhong
-TOTAL_GPUS=1
-DATA_RANGE= #:1
-SESSION_EXEC=true
+source $(dirname $0)/experiment_utils.sh
+
+GPUS=$(experiment_argparse --gpus 1 $@)
+GPU0=$(experiment_argparse --gpu0 0 $@)
+HGF_USER=$(experiment_argparse --user w32zhong $@)
+DATA_RANGE=$(experiment_argparse --range "" $@)
+SESSION_END=$(experiment_argparse --session-end "exit" $@)
 
 MODELS="$MODELS blooming-silence-78 laced-wood-90 trim-waterfall-88"
 MODELS="$MODELS silvery-planet-91 royal-breeze-92 lemon-hill-93"
@@ -14,62 +17,40 @@ for model in $MODELS; do
   MODEL_PATHS="$MODEL_PATHS $HGF_USER/$model"
 done
 
-rm -f gpu*.lock
-set -e
+rm -f gpu_*.lock
 cnt=0
-
 for model_path in $MODEL_PATHS; do
   for bs in 1 4 8; do
     for tree in 6,10,60 3,1,4; do
       for disable_cuda_graph in False; do
-        dev=$((cnt % $TOTAL_GPUS))
-        let "cnt += 1"
-        session_ID=$model_path-bs$bs-$tree-$disable_cuda_graph
-        if tmux has-session -t $session_ID; then
-          echo "session exists: $session_ID"
-          continue;
-        fi
-        set -x
-        tmux new-session -d -s $session_ID -- bash -c "
-          (flock 200;
-            CUDA_VISIBLE_DEVICES=0,1,2,3 \
-            python -m demo.sglang_inference engine_mode \
-              --mtbench question.jsonl${DATA_RANGE} \
-              --outfile ./output/$session_ID.log \
-              --disallow_outfile_overwrite \
-              --bs $bs --max_new_tokens 2048 \
-              --dtype bfloat16 --tp_size 4 \
-              --disable_cuda_graph $disable_cuda_graph \
-              --speculative_algorithm EAGLE --speculative_tree $tree \
-              $model_path;
-              echo 'unlocking...'
-              flock --unlock 200) 200>gpu${dev}.lock;
-          exec $SESSION_EXEC
-        "
-        set +x
-        #exit
+        for tp_size in 2; do
+          devices=$(experiment_alloc_devices $cnt $GPUS $tp_size $GPU0)
+          if [[ -z "$devices" ]]; then
+            cnt=0; continue
+          else
+            echo CUDA_VISIBLE_DEVICES=$devices
+            let "cnt+=$tp_size"
+          fi
+          session=$model_path-bs$bs-$tree-CG$disable_cuda_graph-tp$tp_size
+          session=$(experiment_sanitize $session)
+          if tmux has-session -t $session; then
+            echo "session exists: $session"; continue
+          fi
+          experiment_session $session \
+            "(flock 200; CUDA_VISIBLE_DEVICES=$devices \
+              python -m demo.sglang_inference engine_mode \
+                --mtbench question.jsonl${DATA_RANGE} \
+                --outfile ./output/$session.log \
+                --disallow_outfile_overwrite \
+                --bs $bs --max_new_tokens 2048 \
+                --dtype bfloat16 --tp_size $tp_size \
+                --disable_cuda_graph $disable_cuda_graph \
+                --speculative_algorithm EAGLE --speculative_tree $tree \
+                $model_path;
+                echo 'UNLOCK'; flock --unlock 200) 200>gpu_${devices}.lock"
+          experiment_session $session $SESSION_END
+        done
       done
     done
   done
 done
-
-#for model_path in $MODEL_PATHS; do
-#    dev=$((cnt % $TOTAL_GPUS))
-#    set -x
-#    CUDA_VISIBLE_DEVICES=$dev flock gpu${dev}.lock \
-#      python -m specforge_het.inference \
-#        --mtbench question.jsonl${DATA_RANGE} \
-#        --outfile ./gpu${dev}.log \
-#        --inference.max_new_tokens 2048 \
-#        --modeling.dtype torch.bfloat16 \
-#        --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
-#        --modeling.model_path $model_path &
-#    set +x
-#    let "cnt += 1"
-#done
-
-##### Tips to manage sessions #####
-# To kill all sessions by PIDs: pkill -f $HGF_USER
-# To inspect a session: tmux capture-pane -pt <session_ID>
-# To list all sessions: tmux list-sessions -F '#S' -f "#{m:$HGF_USER*,#S}"
-# Pipe above to kill sessions: | xargs -n 1 tmux kill-session -t
