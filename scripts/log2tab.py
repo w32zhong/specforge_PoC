@@ -66,35 +66,49 @@ def first_match(matches, key, none_char='-', round_to=2):
 
 
 def multi_layer_results(path):
-    for ckpt in 'blooming-silence-78,laced-wood-90,trim-waterfall-88'.split(',')[::-1]:
-        for col, col_filter in enumerate([
-            f'--bs=1&--speculative_tree=6,10,60&w32zhong/{ckpt}', # 0
-            f'--bs=4&--speculative_tree=6,10,60&w32zhong/{ckpt}',
-            f'--bs=8&--speculative_tree=6,10,60&w32zhong/{ckpt}',
-            f'--bs=1&--speculative_tree=3,1,4&w32zhong/{ckpt}',   # 3
-            f'--bs=4&--speculative_tree=3,1,4&w32zhong/{ckpt}',
-            f'--bs=8&--speculative_tree=3,1,4&w32zhong/{ckpt}',
-        ]):
-            matches = filter_jsonl(path, '*', argv=col_filter.split('&'))
-            m1 = filter_json_array([m['*'] for m in matches], 'throughputs', 'avg_accept_len',
-                              argv='--disable_cuda_graph=False')
-            m2 = filter_json_array([m['*'] for m in matches], 'throughputs', 'avg_accept_len',
-                              argv='--disable_cuda_graph=True')
-            if col == 0 or col == 3:
-                m3 = filter_jsonl(path, 'avg_accept_len', argv=[
-                    '--@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2',
-                    f'w32zhong/{ckpt}'
-                ])
-                assert len(m3) == 1
-                sgl_accept_len = first_match(m2, 'avg_accept_len')
-                ref_accept_len = first_match(m3, 'avg_accept_len')
-                if col == 0:
-                    cell = f'{sgl_accept_len} | {ref_accept_len}'
-                else:
-                    cell = f'{sgl_accept_len}'
-                print(cell, end=', ')
-            cell = f'{first_match(m1, 'throughputs')}/{first_match(m2, 'throughputs')}'
-            print(cell, end=', ')
+    MODELS=""
+    MODELS=f"{MODELS} blooming-silence-78 laced-wood-90 trim-waterfall-88"
+    MODELS=f"{MODELS} silvery-planet-91 royal-breeze-92 lemon-hill-93"
+    MODELS=f"{MODELS} dulcet-cloud-94 daily-puddle-95 stellar-monkey-97 upbeat-bee-96"
+    MODELS=MODELS.strip().split()
+    for row, ckpt in enumerate(MODELS[::-1]):
+        print(ckpt, end=', ')
+        print(len(MODELS) - row, end=', ')
+
+        filters = f'--bs=1&--speculative_tree=6,10,60&w32zhong/{ckpt}' # 0
+        matches = filter_jsonl(path, 'throughputs', 'avg_accept_len', argv=filters.split('&'))
+        print(first_match(matches, 'avg_accept_len'), end=', ')
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=4&--speculative_tree=6,10,60&w32zhong/{ckpt}' # 1
+        matches = filter_jsonl(path, 'throughputs', argv=filters.split('&'))
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=8&--speculative_tree=6,10,60&w32zhong/{ckpt}' # 2
+        matches = filter_jsonl(path, 'throughputs', argv=filters.split('&'))
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=16&--speculative_tree=6,10,60&w32zhong/{ckpt}' # 3
+        matches = filter_jsonl(path, 'throughputs', argv=filters.split('&'))
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=1&--speculative_tree=3,1,4&w32zhong/{ckpt}' # 4
+        matches = filter_jsonl(path, 'throughputs', 'avg_accept_len', argv=filters.split('&'))
+        print(first_match(matches, 'avg_accept_len'), end=', ')
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=4&--speculative_tree=3,1,4&w32zhong/{ckpt}' # 5
+        matches = filter_jsonl(path, 'throughputs', argv=filters.split('&'))
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=8&--speculative_tree=3,1,4&w32zhong/{ckpt}' # 5
+        matches = filter_jsonl(path, 'throughputs', argv=filters.split('&'))
+        print(first_match(matches, 'throughputs'), end=', ')
+
+        filters = f'--bs=16&--speculative_tree=3,1,4&w32zhong/{ckpt}' # 6
+        matches = filter_jsonl(path, 'throughputs', argv=filters.split('&'))
+        print(first_match(matches, 'throughputs'), end=', ')
+
         print()
 
 
