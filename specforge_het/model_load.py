@@ -110,7 +110,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
         # draft_config_modify_keys list ensures custom keys overwrite default keys.
         for key in draft_config_modify_keys:
             val = eval(draft_config_modify[key])
-            old_val = getattr(draft_config, key)
+            old_val = getattr(draft_config, key, None)
             if old_val != val:
                 setattr(draft_config, key, val)
                 master_print(f'drafter config[{key}]: {old_val} -> {val}')
