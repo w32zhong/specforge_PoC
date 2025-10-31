@@ -45,12 +45,9 @@ class Qwen3MoeDrafter(Qwen3MoeModel):
         # shared experts
         residuals = self.shared_experts(hidden_states)
         # routed experts
-        assert origin_forward is not None
-        hidden_states = origin_forward(hidden_states)
-        if isinstance(hidden_states, tuple):
-            hidden_states, _ = hidden_states
+        hidden_states, router_logits = origin_forward(hidden_states)
         # add outputs
-        return hidden_states + residuals
+        return hidden_states + residuals, router_logits
 
     def get_hidden_size(self):
         return self.config.hidden_size
