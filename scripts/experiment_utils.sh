@@ -1,14 +1,9 @@
 set -e
 
 experiment_alloc_devices() {
-	index=$1; total=$2; step=$3; base=$4;
-	dev_begin=$(python -c "print($index % $total + $base)")
-	dev_end=$(python -c "print(($index + $step - 1) % $total + $base)")
-	let "index += $step"
-	if [ $dev_end -lt $dev_begin ]; then
-		echo ""
-	fi
-	echo $(seq -s ',' $dev_begin $dev_end)
+	index=$1; base=$2; total=$3; step=$4;
+	dev_begin=$(python -c "print(($index * $step) % ($total - $total % $step) + $base)")
+	echo $(seq -s ',' $dev_begin $(( dev_begin + step - 1 )))
 }
 
 experiment_sanitize() {

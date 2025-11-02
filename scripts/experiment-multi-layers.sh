@@ -24,13 +24,9 @@ for model_path in $MODEL_PATHS; do
     for tree in 6,10,60 3,1,4; do
       for disable_cuda_graph in False; do
         for tp_size in 2; do
-          devices=$(experiment_alloc_devices $cnt $GPUS $tp_size $GPU0)
-          if [[ -z "$devices" ]]; then
-            cnt=0; continue
-          else
-            echo CUDA_VISIBLE_DEVICES=$devices
-            let "cnt+=$tp_size"
-          fi
+          devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $tp_size)
+          let 'cnt+=1'
+          echo CUDA_VISIBLE_DEVICES=$devices
           session=$model_path-bs$bs-$tree-CG$disable_cuda_graph-tp$tp_size
           session=$(experiment_sanitize $session)
           if tmux has-session -t "exp_$session"; then
