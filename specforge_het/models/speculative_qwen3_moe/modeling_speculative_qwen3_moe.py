@@ -18,8 +18,9 @@ class Qwen3MoeDrafter(Qwen3MoeModel):
             for layer in self.layers:
                 for _ in range(draft_config.zero_compute_experts):
                     layer.mlp.experts.pop(-1)
+                for _ in range(draft_config.zero_compute_experts):
                     layer.mlp.experts.append(torch.nn.Identity())
-                recycle_vram()
+            recycle_vram()
 
         if getattr(draft_config, 'shared_experts', None):
             intermediate_size = draft_config.moe_intermediate_size * draft_config.shared_experts
