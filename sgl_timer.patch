@@ -1,0 +1,145 @@
+diff --git a/python/pyproject.toml b/python/pyproject.toml
+old mode 100755
+new mode 100644
+index ddd33dc..3f2fd3e
+--- a/python/pyproject.toml
++++ b/python/pyproject.toml
+@@ -24,7 +24,6 @@ dependencies = [
+   "datasets",
+   "einops",
+   "fastapi",
+-  "flashinfer_python==0.4.0rc3",
+   "hf_transfer",
+   "huggingface_hub",
+   "interegular",
+@@ -53,17 +52,10 @@ dependencies = [
+   "scipy",
+   "sentencepiece",
+   "setproctitle",
+-  "sgl-kernel==0.3.14.post1",
+   "soundfile==0.13.1",
+   "tiktoken",
+   "timm==1.0.16",
+-  "torch==2.8.0",
+-  "torch_memory_saver==0.0.9rc2",
+-  "torchao==0.9.0",
+-  "torchaudio==2.8.0",
+-  "torchvision",
+   "tqdm",
+-  "transformers==4.57.0",
+   "uvicorn",
+   "uvloop",
+   "xgrammar==0.1.24",
+@@ -81,7 +73,6 @@ test = [
+   "pandas",
+   "peft",
+   "pytest",
+-  "sentence_transformers",
+   "tabulate",
+ ]
+ tracing = [
+diff --git a/python/sglang/srt/managers/scheduler_output_processor_mixin.py b/python/sglang/srt/managers/scheduler_output_processor_mixin.py
+index e307a68..ad1f256 100644
+--- a/python/sglang/srt/managers/scheduler_output_processor_mixin.py
++++ b/python/sglang/srt/managers/scheduler_output_processor_mixin.py
+@@ -253,6 +253,10 @@ class SchedulerOutputProcessorMixin:
+ 
+             req.check_finished()
+             if req.finished():
++                mytimer = self.model_worker.mytimer
++                print(self.model_worker.mytimer.report())
++                #import rpdb; rpdb.set_trace()
++
+                 if self.server_args.disaggregation_decode_enable_offload_kvcache:
+                     # Asynchronously offload KV cache; cache_finished_req will be called after Device->Host transfer completes
+                     if not self.decode_offload_manager.offload_kv_cache(req):
+diff --git a/python/sglang/srt/speculative/eagle_worker.py b/python/sglang/srt/speculative/eagle_worker.py
+index 08d659d..ebfae64 100644
+--- a/python/sglang/srt/speculative/eagle_worker.py
++++ b/python/sglang/srt/speculative/eagle_worker.py
+@@ -82,6 +82,11 @@ class EAGLEWorker(TpModelWorker):
+         nccl_port: int,
+         target_worker: TpModelWorker,
+     ):
++        import sys
++        sys.path.insert(0, '/workspace/mnt')
++        from specforge_het.timer import TimeStats
++        self.mytimer = TimeStats(disable=False)
++
+         # Parse arguments
+         self.server_args = server_args
+         self.topk = server_args.speculative_eagle_topk
+@@ -456,11 +461,15 @@ class EAGLEWorker(TpModelWorker):
+                 can_run_cuda_graph=False,
+             )
+         else:
++            self.mytimer.start('draft')
+             with self.draft_tp_context(self.draft_model_runner.tp_group):
+                 spec_info = self.draft(batch)
++            self.mytimer.stop('draft')
++            self.mytimer.start('verify')
+             logits_output, verify_output, model_worker_batch, can_run_cuda_graph = (
+                 self.verify(batch, spec_info)
+             )
++            self.mytimer.stop('verify')
+ 
+             with self.draft_tp_context(self.draft_model_runner.tp_group):
+                 # NOTE: We should use `check_forward_draft_extend_after_decode`
+@@ -470,7 +479,9 @@ class EAGLEWorker(TpModelWorker):
+                     or batch.spec_info.verified_id.shape[0] > 0
+                 ):
+                     # decode is not finished
++                    self.mytimer.start('draft_prefill')
+                     self.forward_draft_extend_after_decode(batch)
++                    self.mytimer.stop('draft_prefill')
+ 
+             return ForwardBatchOutput(
+                 logits_output=logits_output,
+@@ -693,6 +704,7 @@ class EAGLEWorker(TpModelWorker):
+                 self.speculative_num_draft_tokens,
+             )
+ 
++        self.mytimer.start('draft_build_tree')
+         (
+             tree_mask,
+             position,
+@@ -711,6 +723,7 @@ class EAGLEWorker(TpModelWorker):
+             self.speculative_num_steps,
+             self.speculative_num_draft_tokens,
+         )
++        self.mytimer.stop('draft_build_tree')
+ 
+         return EagleVerifyInput(
+             draft_token=draft_tokens,
+@@ -756,9 +769,12 @@ class EAGLEWorker(TpModelWorker):
+         # Forward multiple steps
+         scores = None
+         for i in range(self.speculative_num_steps):
++            self.mytimer.start('draft_step_select_top_k')
+             input_ids, hidden_states, scores, tree_info = select_top_k_tokens(
+                 i, topk_p, topk_index, hidden_states, scores, self.topk
+             )
++            self.mytimer.stop('draft_step_select_top_k')
++
+             score_list.append(tree_info[0])
+             token_list.append(tree_info[1])
+             parents_list.append(tree_info[2])
+@@ -783,12 +799,18 @@ class EAGLEWorker(TpModelWorker):
+             spec_info.hidden_states = hidden_states
+ 
+             # Run forward
++            self.mytimer.start('draft_step_forward')
+             logits_output, _ = self.draft_model_runner.forward(
+                 forward_batch, skip_attn_backend_init=True
+             )
++            self.mytimer.stop('draft_step_forward')
+             self._detect_nan_if_needed(logits_output)
++
++            self.mytimer.start('draft_step_top_k')
+             probs = torch.softmax(logits_output.next_token_logits, dim=-1)
+             topk_p, topk_index = fast_topk(probs, self.topk, dim=-1)
++            self.mytimer.stop('draft_step_top_k')
++
+             if self.hot_token_id is not None:
+                 topk_index = self.hot_token_id[topk_index]
+             hidden_states = logits_output.hidden_states
