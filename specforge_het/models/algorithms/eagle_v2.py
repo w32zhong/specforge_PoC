@@ -283,7 +283,7 @@ class EagleV2:
             self.timer.start('speculative_generate verify')
             accept_tokens, accept_idx, hidden_states = self.verify(
                 base_kv, position_embeddings, past_seq_len,
-                **draft_outputs
+                draft_indices['idx_B'], **draft_outputs
             )
             self.timer.stop('speculative_generate verify')
 
@@ -355,7 +355,7 @@ class EagleV2:
         B = ranked_top_nodes.shape[0]
         row_map = torch.searchsorted(ranked_top_nodes, ranked_top_nodes_parents)
         row_map[ranked_top_nodes_parents == -1] = -1
-        # move the for-loop below to CPU to avoid multiple memory movements
+        # move the for-loop below to CPU to avoid multiple memory movements later
         row_map = row_map.cpu()
         # to include draft root: prepend zeros and offset-by-one:
         zeros = torch.zeros((B, 1), dtype=torch.long)
@@ -427,13 +427,15 @@ class EagleV2:
         eye = torch.eye(top_k, device=device, dtype=self.dtype)
         batched_eye = eye.expand(B, -1, -1)
         attn_eye = finalize_mask(batched_eye)
-        idx_B = torch.arange(B)[:, None]
+        idx_B1 = torch.arange(B)[:, None] # cpu
+        idx_B2 = torch.arange(B)[:, None].to(device)
+        idx_B3 = torch.arange(B)[:, None].to(self.base_model.device)
         top_path_idx = torch.zeros((B, top_k), device=device, dtype=torch.long)
         tree_size = all_top_k + 1
         draft_token_buff = torch.zeros((B, tree_size + 1), dtype=torch.long,
                                        device=self.base_model.device) - 100
         return dict(top_k=top_k, all_top_k=all_top_k, max_depth=max_depth,
-                    zero_posi=zero_posi, attn_eye=attn_eye, idx_B=idx_B,
+                    zero_posi=zero_posi, attn_eye=attn_eye, idx_B=(idx_B1, idx_B2, idx_B3),
                     top_path_idx=top_path_idx, draft_token_buff=draft_token_buff)
 
     def dynamic_draft(self, draft_kv, position_embeddings, past_seq_len,
@@ -456,19 +458,18 @@ class EagleV2:
         self.timer.stop('draft prepare')
 
         for depth in range(max_depth):
-            self.timer.start('draft preforward')
+            self.timer.start('draft forward')
             # get hidden states from draft_tokens
-            inputs_embeds = self.get_token_embedding(draft_tokens)
-            inputs_embeds = inputs_embeds.to(draft_device) # [B, n_draft_tokens, H]
+            inputs_embeds = self.get_token_embedding(draft_tokens) # [B, n_draft_tokens, H]
+            inputs_embeds = inputs_embeds.to(draft_device)
+            last_states = last_states.to(draft_device)
             hidden_states = self.draft_model.eagle_fc(
                 torch.cat((inputs_embeds, last_states), dim=-1)
             ) # [B, n_draft_tokens, H]
 
             n_draft_tokens = inputs_embeds.shape[1]
             tree_depth_pos = (past_seq_len + depth) + zero_posi[:n_draft_tokens]
-            self.timer.stop('draft preforward')
 
-            self.timer.start('draft forward')
             for decoder_layer in self.draft_model.layers:
                 hidden_states = decoder_layer(
                     hidden_states,
@@ -527,7 +528,7 @@ class EagleV2:
             top_path = torch.topk(top_path_logprobs.view(B, -1), top_k, dim=-1)
             self.timer.stop('draft select_top_k')
 
-            self.timer.start('draft reset')
+            self.timer.start('draft iter reset')
             top_path_idx, top_path_logprobs = top_path.indices, top_path.values
             parent_idx = top_path_idx // top_k # [B, 10]
 
@@ -536,18 +537,17 @@ class EagleV2:
                 top_tokens.view(B, -1), dim=-1, index=top_path_idx
             ) # [B, 10]
 
-            last_states = hidden_states[idx_B, parent_idx] # [B, 10, H]
-
-            select_rows = tree_depth_mask[idx_B, parent_idx] # [B, 10, n_col]
+            last_states = hidden_states[idx_B[1], parent_idx] # [B, 10, H]
+            select_rows = tree_depth_mask[idx_B[1], parent_idx] # [B, 10, n_col]
             tree_depth_mask = torch.cat((select_rows, attn_eye), dim=-1)
-            self.timer.stop('draft reset')
+            self.timer.stop('draft iter reset')
 
         self.timer.start('draft collect_nodes')
         ranked_top_nodes, parents, tokens = self.get_all_top_nodes(
             parent_Q, draft_Q, score_Q, top_k, all_top_k
         )
 
-        ranked_top_nodes_parents = parents[idx_B, ranked_top_nodes // top_k]
+        ranked_top_nodes_parents = parents[idx_B[1], ranked_top_nodes // top_k]
         if True:
             # Sanity Check
             # (parent scores must be strictly larger, so parents must
@@ -557,11 +557,11 @@ class EagleV2:
             assert torch.all(parent_appears | parent_is_root)
         row_map = self.construct_row_map(ranked_top_nodes, ranked_top_nodes_parents)
         draft_token_buff[:, 0] = next_root
-        draft_token_buff[:, 1:-1] = tokens[idx_B, ranked_top_nodes]
+        draft_token_buff[:, 1:-1] = tokens[idx_B[1], ranked_top_nodes]
         self.timer.stop('draft collect_nodes')
 
         self.timer.start('draft extract_tree_mask&extract_leaf_root_paths')
-        tree_mask, tree_positions = self.extract_tree_mask(idx_B, row_map, all_top_k)
+        tree_mask, tree_positions = self.extract_tree_mask(idx_B[0], row_map, all_top_k)
         #torch.set_printoptions(threshold=torch.inf)
         #torch.set_printoptions(linewidth=200)
         #print(tree_mask)
@@ -578,11 +578,10 @@ class EagleV2:
             tree_positions=tree_positions, leaf_root_paths=leaf_root_paths
         )
 
-    def verify(self, base_kv, position_embeddings, past_seq_len, *,
+    def verify(self, base_kv, position_embeddings, past_seq_len, idx_B, *,
                draft_token_buff, tree_mask, tree_positions, leaf_root_paths):
         self.timer.start('verify prepare')
         B = draft_token_buff.shape[0]
-        idx_B = torch.arange(B).unsqueeze(-1)
         hidden_states = self.get_token_embedding(draft_token_buff[..., :-1])
 
         ext_tree_mask = torch.nn.functional.pad(
@@ -600,8 +599,8 @@ class EagleV2:
                 hidden_states,
                 attention_mask=finalize_mask(ext_tree_mask).unsqueeze(1),
                 position_embeddings=(
-                    position_embeddings[0][idx_B, ext_tree_positions],
-                    position_embeddings[1][idx_B, ext_tree_positions]
+                    position_embeddings[0][idx_B[1], ext_tree_positions],
+                    position_embeddings[1][idx_B[1], ext_tree_positions]
                 ),
                 use_cache=True,
                 past_key_value=base_kv
@@ -616,18 +615,18 @@ class EagleV2:
         next_tokens = next_tokens.to(self.base_model.device)
         leaf_root_paths = leaf_root_paths.to(self.base_model.device)
 
-        draft_paths = draft_token_buff[idx_B, leaf_root_paths][..., 1:]
-        truth_paths = next_tokens[idx_B, leaf_root_paths]
+        draft_paths = draft_token_buff[idx_B[2], leaf_root_paths][..., 1:]
+        truth_paths = next_tokens[idx_B[2], leaf_root_paths]
 
         match_paths = (draft_paths == truth_paths[..., :-1]).cumprod(dim=-1)
         match_length, match_idx = match_paths.sum(-1).topk(k=1)
         # since we only care about top-1 here, no need for the last dimension.
-        idx_B, match_length, match_idx, bonus = (
-            idx_B.squeeze(-1), match_length.squeeze(-1), match_idx.squeeze(-1), 1
+        idx_B, match_length_and_bonus, match_idx = (
+            idx_B[2].squeeze(-1), match_length.squeeze(-1) + 1, match_idx.squeeze(-1)
         ) # shape: [B]
-        accept_tokens = truth_paths[idx_B, match_idx, :match_length + bonus]
-        accept_idx = leaf_root_paths[idx_B, match_idx, :match_length + bonus]
-        accept_states = hidden_states[idx_B, accept_idx.to(hidden_states.device)]
+        accept_tokens = truth_paths[idx_B, match_idx, :match_length_and_bonus]
+        accept_idx = leaf_root_paths[idx_B, match_idx, :match_length_and_bonus]
+        accept_states = hidden_states.to(idx_B.device)[idx_B, accept_idx]
         self.timer.stop('verify matching')
 
         return accept_tokens, accept_idx, accept_states
