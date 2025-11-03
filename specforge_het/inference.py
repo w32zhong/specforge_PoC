@@ -83,9 +83,8 @@ def main(config_file='configs.ini', use_saved_json_config=None, sys_prompt=None,
         )
 
     tokenizer, model = load_models(configs.modeling)
-    model.eval()
     model.tokenizer = tokenizer
-    model.inference_configs = configs.inference
+    model.prepare_inference(configs.inference)
 
     begin = time.perf_counter()
     if mtbench:
@@ -132,6 +131,9 @@ def main(config_file='configs.ini', use_saved_json_config=None, sys_prompt=None,
 
     for key, val in metrics.items():
         print(f'{key:>30}:', val)
+
+    if configs.inference.timer:
+        print(model.timer.report())
 
     if outfile is not None:
         with open(outfile, 'a') as fh:

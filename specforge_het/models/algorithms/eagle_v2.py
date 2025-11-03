@@ -1,6 +1,7 @@
 import torch, random
 from transformers.cache_utils import DynamicCache
 from specforge_het.debug import g_tensor_ckpt, debug_hook_model
+from specforge_het.timer import TimeStats
 
 
 def finalize_mask(mask): # 0 -> -infty,  1 -> 0
@@ -199,6 +200,10 @@ class EagleV2:
     ###############
     ## Inference ##
     ###############
+    def prepare_inference(self, inference_configs):
+        self.eval()
+        self.inference_configs = inference_configs
+        self.timer = TimeStats(disable=(not inference_configs.timer))
 
     def prefill_base_model(self, inputs_embeds, attention_mask):
         base_kv = DynamicCache()
@@ -241,6 +246,7 @@ class EagleV2:
         return self.get_positional_embedding(inputs_embeds, position_ids)
 
     def speculative_generate(self, input_ids, attention_mask, **kwargs):
+        self.timer.start('speculative_generate prepare')
         inputs_embeds = self.get_token_embedding(input_ids)
         position_embeddings = self.prebuilt_position_embeddings(inputs_embeds)
         max_length = position_embeddings[0].shape[1]
@@ -260,23 +266,28 @@ class EagleV2:
         #   \draft\  |           |        |
         # t1 t2 t3 t4|t5 ~~~~~~~~|t5 t6 t7|t8
         draft_indices = self.dynamic_draft_indices(input_ids.shape[0])
+        self.timer.stop('speculative_generate prepare')
+
         while True:
             # past_seq_len is derived from base_kv because
             # base_kv length is more stable.
             past_seq_len = base_kv.get_seq_length()
 
+            self.timer.start('speculative_generate draft')
             draft_outputs = self.dynamic_draft(
                 draft_kv, position_embeddings, past_seq_len - 1,
                 next_root, last_states, **draft_indices
             )
+            self.timer.stop('speculative_generate draft')
+
+            self.timer.start('speculative_generate verify')
             accept_tokens, accept_idx, hidden_states = self.verify(
                 base_kv, position_embeddings, past_seq_len,
                 **draft_outputs
             )
-            #torch.save(g_tensor_ckpt, "my_llama2.pth")
-            #torch.save(g_tensor_ckpt, "my_qwen3.pth")
-            #quit()
+            self.timer.stop('speculative_generate verify')
 
+            self.timer.start('speculative_generate reset')
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
             self.reset_kv_cache(base_kv, draft_kv, past_seq_len, accept_idx)
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
@@ -293,6 +304,7 @@ class EagleV2:
             else:
                 last_states = hidden_states
                 next_root = accept_tokens
+            self.timer.stop('speculative_generate reset')
 
     def topk_tokens(self, hiddens, top_k, debug=False):
         logits = self.get_token_logits(hiddens)
