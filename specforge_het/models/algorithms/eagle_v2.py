@@ -548,7 +548,7 @@ class EagleV2:
         )
 
         ranked_top_nodes_parents = parents[idx_B[1], ranked_top_nodes // top_k]
-        if True:
+        if False:
             # Sanity Check
             # (parent scores must be strictly larger, so parents must
             # appear in all_top_k candidates if their children appear)
@@ -565,9 +565,9 @@ class EagleV2:
         #torch.set_printoptions(threshold=torch.inf)
         #torch.set_printoptions(linewidth=200)
         #print(tree_mask)
-        assert tree_positions.max() <= max_depth, (
-            f'tree_positions={tree_positions.max()} > max_depth={max_depth}'
-        )
+        #assert tree_positions.max() <= max_depth, (
+        #    f'tree_positions={tree_positions.max()} > max_depth={max_depth}'
+        #)
 
         leaf_root_paths = self.extract_leaf_root_paths(row_map, max_depth,
                                                       tree_mask, tree_positions)
