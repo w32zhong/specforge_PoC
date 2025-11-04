@@ -19,11 +19,10 @@ def shrink_cache(cache, past_seq_len, select_indices=None, debug=False):
         B, H, _, D = cache.shape
         select_indices = select_indices.to(cache.device)
 
-        idx = select_indices[:, None, :, None].expand(B, H, S, D)
-        src = torch.gather(cache, dim=2, index=idx)
-
         dst = cache[..., past_seq_len: past_seq_len + S, :]
-        dst.copy_(src, non_blocking=False)
+        for b in range(B):
+            src = cache[b].index_select(dim=1, index=select_indices[b])
+            dst[b].copy_(src, non_blocking=True)
 
         new_cache = cache[..., : past_seq_len + S, :]
     else:
@@ -266,9 +265,16 @@ class EagleV2:
         #   \draft\  |           |        |
         # t1 t2 t3 t4|t5 ~~~~~~~~|t5 t6 t7|t8
         draft_indices = self.dynamic_draft_indices(input_ids.shape[0])
+
+        position_embeddings_for_verify = (
+            position_embeddings[0].to(self.base_model.device),
+            position_embeddings[1].to(self.base_model.device)
+        )
+
         self.timer.stop('speculative_generate prepare')
 
         while True:
+            self.timer.start('speculative_generate')
             # past_seq_len is derived from base_kv because
             # base_kv length is more stable.
             past_seq_len = base_kv.get_seq_length()
@@ -282,19 +288,21 @@ class EagleV2:
 
             self.timer.start('speculative_generate verify')
             accept_tokens, accept_idx, hidden_states = self.verify(
-                base_kv, position_embeddings, past_seq_len,
+                base_kv, position_embeddings_for_verify, past_seq_len,
                 draft_indices['idx_B'], **draft_outputs
             )
             self.timer.stop('speculative_generate verify')
 
-            self.timer.start('speculative_generate reset')
+            self.timer.start('speculative_generate resetKV')
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
             self.reset_kv_cache(base_kv, draft_kv, past_seq_len, accept_idx)
             #print(draft_kv.layers[0].keys[0,0].sum(-1))
+            self.timer.stop('speculative_generate resetKV')
 
             yield accept_tokens
 
             # TODO: last states per batch is not necessarily the last element.
+            self.timer.start('speculative_generate fill_draft_model')
             if accept_tokens.shape[-1] > 1:
                 prev_states, last_states = hidden_states[:, :-1], hidden_states[:, -1:]
                 prefill_tokens, next_root = accept_tokens[:, :-1], accept_tokens[:, -1:]
@@ -304,7 +312,8 @@ class EagleV2:
             else:
                 last_states = hidden_states
                 next_root = accept_tokens
-            self.timer.stop('speculative_generate reset')
+            self.timer.stop('speculative_generate fill_draft_model')
+            self.timer.stop('speculative_generate')
 
     def topk_tokens(self, hiddens, top_k, debug=False):
         logits = self.get_token_logits(hiddens)
@@ -589,19 +598,23 @@ class EagleV2:
         ).to(dtype=hidden_states.dtype)
 
         ext_tree_positions = past_seq_len + tree_positions
+
+        ext_tree_mask = ext_tree_mask.to(hidden_states.device)
+        ext_tree_positions = ext_tree_positions.to(hidden_states.device)
         self.timer.stop('verify prepare')
 
         self.timer.start('verify forward')
-        assert len(self.base_model.layers) == self.config.num_hidden_layers
+        #assert len(self.base_model.layers) == self.config.num_hidden_layers
+        attention_mask = finalize_mask(ext_tree_mask).unsqueeze(1)
+        position_embeddings = (
+            position_embeddings[0][idx_B[2], ext_tree_positions],
+            position_embeddings[1][idx_B[2], ext_tree_positions]
+        )
         for decoder_layer in self.base_model.layers:
-            ext_tree_mask = ext_tree_mask.to(hidden_states.device)
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=finalize_mask(ext_tree_mask).unsqueeze(1),
-                position_embeddings=(
-                    position_embeddings[0][idx_B[1], ext_tree_positions],
-                    position_embeddings[1][idx_B[1], ext_tree_positions]
-                ),
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
                 use_cache=True,
                 past_key_value=base_kv
             )
@@ -632,7 +645,7 @@ class EagleV2:
         return accept_tokens, accept_idx, accept_states
 
     def reset_kv_cache(self, base_kv, draft_kv, past_seq_len, indices):
-        select_indices = past_seq_len + indices
+        select_indices = indices + past_seq_len
         for layer in base_kv.layers:
             layer.keys = shrink_cache(layer.keys, past_seq_len, select_indices)
             layer.values = shrink_cache(layer.values, past_seq_len, select_indices)
