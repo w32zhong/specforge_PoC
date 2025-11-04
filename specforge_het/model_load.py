@@ -184,6 +184,8 @@ def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
         attn_implementation="eager", device_map=device_map,
         torch_dtype=eval(configs.dtype), max_memory=configs.max_memory
     )
+    if model.config._attn_implementation != "eager":
+        model.set_attn_implementation("eager")
 
     # ensure no module is on an abstract device
     for path, module in model.named_modules():

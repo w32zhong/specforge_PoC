@@ -79,6 +79,7 @@ class SpecForgeLM():
             + model.config.speculative_decoding_draft_model)
         draft_config = AutoConfig.from_pretrained(f'{path}/draft_model', trust_remote_code=True)
         draft_model = DrafterClass(draft_config, model)
+        draft_model.set_attn_implementation("eager") # for easy-to-read reference implementation
         model.set_draft_model(draft_model)
         draft_state_dict = torch.load(f'{path}/draft_model/states.pt',
                                       map_location='cpu')

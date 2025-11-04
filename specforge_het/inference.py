@@ -13,7 +13,7 @@ def generate(model, inputs):
     print(tokenizer.batch_decode(inputs.input_ids), end='\n', flush=True)
     meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
     with torch.no_grad():
-        if is_speculative_model(model):
+        if is_speculative_model(model) and not model.inference_configs.target_model_only:
             eos = tokenizer.eos_token_id
             new_tokens = []
             for tokens in model.speculative_generate(**inputs):
@@ -37,8 +37,7 @@ def generate(model, inputs):
 
         else:
             from transformers import GenerationConfig, TextStreamer
-            generation_config = GenerationConfig.from_pretrained(
-                configs.modeling.model_path,
+            generation_config = GenerationConfig(
                 do_sample=False,
                 max_new_tokens=model.inference_configs.max_new_tokens
             )
