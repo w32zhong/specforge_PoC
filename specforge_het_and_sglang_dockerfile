@@ -64,3 +64,5 @@ RUN cd sglang/sgl-kernel && cmake --fresh -S . -B build -G Ninja \
     -DTORCH_CUDA_ARCH_LIST="$CUDA_ARCH_LIST" \
     && python -m build --wheel --no-isolation --verbose -Cbuild-dir=build . \
     && pip install dist/*whl --force-reinstall --no-deps
+# other patching pip pkg
+RUN pip install pydantic==2.12.3 fschat==0.2.31
