@@ -1,75 +1,67 @@
-diff --git a/python/pyproject.toml b/python/pyproject.toml
-old mode 100755
-new mode 100644
-index ddd33dc..3f2fd3e
---- a/python/pyproject.toml
-+++ b/python/pyproject.toml
-@@ -24,7 +24,6 @@ dependencies = [
-   "datasets",
-   "einops",
-   "fastapi",
--  "flashinfer_python==0.4.0rc3",
-   "hf_transfer",
-   "huggingface_hub",
-   "interegular",
-@@ -53,17 +52,10 @@ dependencies = [
-   "scipy",
-   "sentencepiece",
-   "setproctitle",
--  "sgl-kernel==0.3.14.post1",
-   "soundfile==0.13.1",
-   "tiktoken",
-   "timm==1.0.16",
--  "torch==2.8.0",
--  "torch_memory_saver==0.0.9rc2",
--  "torchao==0.9.0",
--  "torchaudio==2.8.0",
--  "torchvision",
-   "tqdm",
--  "transformers==4.57.0",
-   "uvicorn",
-   "uvloop",
-   "xgrammar==0.1.24",
-@@ -81,7 +73,6 @@ test = [
-   "pandas",
-   "peft",
-   "pytest",
--  "sentence_transformers",
-   "tabulate",
- ]
- tracing = [
-diff --git a/python/sglang/srt/managers/scheduler_output_processor_mixin.py b/python/sglang/srt/managers/scheduler_output_processor_mixin.py
-index e307a68..ad1f256 100644
---- a/python/sglang/srt/managers/scheduler_output_processor_mixin.py
-+++ b/python/sglang/srt/managers/scheduler_output_processor_mixin.py
-@@ -253,6 +253,10 @@ class SchedulerOutputProcessorMixin:
+diff --git a/python/sglang/srt/managers/scheduler.py b/python/sglang/srt/managers/scheduler.py
+index e1d558c..a208299 100644
+--- a/python/sglang/srt/managers/scheduler.py
++++ b/python/sglang/srt/managers/scheduler.py
+@@ -2048,16 +2048,17 @@ class Scheduler(
  
-             req.check_finished()
-             if req.finished():
-+                mytimer = self.model_worker.mytimer
-+                print(self.model_worker.mytimer.report())
-+                #import rpdb; rpdb.set_trace()
+         # Run forward
+         if self.is_generation:
+-
+             batch_or_worker_batch = batch
+ 
+             if self.spec_algorithm.is_none():
+                 # FIXME(lsyin): remove this if and finally unify the abstraction
+                 batch_or_worker_batch = batch.get_model_worker_batch()
+ 
++            self.model_worker.mytimer.start('forward_batch_generation')
+             forward_batch_output = self.model_worker.forward_batch_generation(
+                 batch_or_worker_batch
+             )
++            self.model_worker.mytimer.stop('forward_batch_generation')
+ 
+             if not self.spec_algorithm.is_none():
+                 # TODO(lsyin): unify this metric-updating logic with non-spec, and move it to decode processing
+@@ -2501,6 +2502,8 @@ class Scheduler(
+             ret["avg_spec_accept_length"] = (
+                 self.cum_spec_accept_length / self.cum_spec_accept_count
+             )
++            ret['mytimer'] = self.draft_worker.mytimer.report()
 +
-                 if self.server_args.disaggregation_decode_enable_offload_kvcache:
-                     # Asynchronously offload KV cache; cache_finished_req will be called after Device->Host transfer completes
-                     if not self.decode_offload_manager.offload_kv_cache(req):
+         if RECORD_STEP_TIME:
+             ret["step_time_dict"] = self.step_time_dict
+ 
 diff --git a/python/sglang/srt/speculative/eagle_worker.py b/python/sglang/srt/speculative/eagle_worker.py
-index 08d659d..ebfae64 100644
+index f0f683b..58c319d 100644
 --- a/python/sglang/srt/speculative/eagle_worker.py
 +++ b/python/sglang/srt/speculative/eagle_worker.py
-@@ -82,6 +82,11 @@ class EAGLEWorker(TpModelWorker):
+@@ -82,6 +82,10 @@ class EAGLEWorker(TpModelWorker):
          nccl_port: int,
          target_worker: TpModelWorker,
      ):
-+        import sys
-+        sys.path.insert(0, '/workspace/mnt')
++        import sys; sys.path.insert(0, '/workspace/mnt')
 +        from specforge_het.timer import TimeStats
-+        self.mytimer = TimeStats(disable=False)
++        self.mytimer = TimeStats()
 +
          # Parse arguments
          self.server_args = server_args
          self.topk = server_args.speculative_eagle_topk
-@@ -456,11 +461,15 @@ class EAGLEWorker(TpModelWorker):
+@@ -442,6 +446,7 @@ class EAGLEWorker(TpModelWorker):
+             the batch id (used for overlap schedule), and number of accepted tokens.
+         """
+         if batch.forward_mode.is_extend() or batch.is_extend_in_batch:
++            self.mytimer.start('prefill')
+             logits_output, next_token_ids, seq_lens_cpu = self.forward_target_extend(
+                 batch
+             )
+@@ -449,6 +454,7 @@ class EAGLEWorker(TpModelWorker):
+                 self.forward_draft_extend(
+                     batch, logits_output.hidden_states, next_token_ids, seq_lens_cpu
+                 )
++            self.mytimer.stop('prefill')
+             return ForwardBatchOutput(
+                 logits_output=logits_output,
+                 next_token_ids=next_token_ids,
+@@ -456,12 +462,18 @@ class EAGLEWorker(TpModelWorker):
                  can_run_cuda_graph=False,
              )
          else:
@@ -77,69 +69,100 @@ index 08d659d..ebfae64 100644
              with self.draft_tp_context(self.draft_model_runner.tp_group):
                  spec_info = self.draft(batch)
 +            self.mytimer.stop('draft')
++
 +            self.mytimer.start('verify')
              logits_output, verify_output, model_worker_batch, can_run_cuda_graph = (
                  self.verify(batch, spec_info)
              )
 +            self.mytimer.stop('verify')
  
++            self.mytimer.start('draft_extend')
              with self.draft_tp_context(self.draft_model_runner.tp_group):
                  # NOTE: We should use `check_forward_draft_extend_after_decode`
-@@ -470,7 +479,9 @@ class EAGLEWorker(TpModelWorker):
-                     or batch.spec_info.verified_id.shape[0] > 0
+                 # when DP attention is enabled, but it is slow. Skip it for now.
+@@ -471,6 +483,7 @@ class EAGLEWorker(TpModelWorker):
                  ):
                      # decode is not finished
-+                    self.mytimer.start('draft_prefill')
                      self.forward_draft_extend_after_decode(batch)
-+                    self.mytimer.stop('draft_prefill')
++            self.mytimer.stop('draft_extend')
  
              return ForwardBatchOutput(
                  logits_output=logits_output,
-@@ -693,6 +704,7 @@ class EAGLEWorker(TpModelWorker):
+@@ -651,6 +664,7 @@ class EAGLEWorker(TpModelWorker):
+         )
+ 
+     def draft(self, batch: ScheduleBatch):
++        self.mytimer.start('draft prepare')
+         # Parse args
+         if batch.forward_mode.is_idle():
+             self._draft_preprocess_idle(batch)
+@@ -674,6 +688,8 @@ class EAGLEWorker(TpModelWorker):
+         can_cuda_graph = self.cuda_graph_runner and self.cuda_graph_runner.can_run(
+             forward_batch
+         )
++        self.mytimer.stop('draft prepare')
++
+         if can_cuda_graph:
+             score_list, token_list, parents_list = self.cuda_graph_runner.replay(
+                 forward_batch
+@@ -693,6 +709,7 @@ class EAGLEWorker(TpModelWorker):
                  self.speculative_num_draft_tokens,
              )
  
-+        self.mytimer.start('draft_build_tree')
++        self.mytimer.start('draft build_tree')
          (
              tree_mask,
              position,
-@@ -711,6 +723,7 @@ class EAGLEWorker(TpModelWorker):
+@@ -711,6 +728,7 @@ class EAGLEWorker(TpModelWorker):
              self.speculative_num_steps,
              self.speculative_num_draft_tokens,
          )
-+        self.mytimer.stop('draft_build_tree')
++        self.mytimer.stop('draft build_tree')
  
          return EagleVerifyInput(
              draft_token=draft_tokens,
-@@ -756,9 +769,12 @@ class EAGLEWorker(TpModelWorker):
+@@ -729,6 +747,7 @@ class EAGLEWorker(TpModelWorker):
+         )
+ 
+     def draft_forward(self, forward_batch: ForwardBatch):
++        self.mytimer.start('draft prepare inner')
+         # Parse args
+         spec_info = forward_batch.spec_info
+         assert isinstance(spec_info, EagleDraftInput)
+@@ -747,6 +766,7 @@ class EAGLEWorker(TpModelWorker):
+         out_cache_loc = out_cache_loc.permute((2, 0, 1)).reshape(
+             self.speculative_num_steps, -1
+         )
++        self.mytimer.stop('draft prepare inner')
+ 
+         # Return values
+         score_list: List[torch.Tensor] = []
+@@ -756,6 +776,7 @@ class EAGLEWorker(TpModelWorker):
          # Forward multiple steps
          scores = None
          for i in range(self.speculative_num_steps):
-+            self.mytimer.start('draft_step_select_top_k')
++            self.mytimer.start('draft loop')
              input_ids, hidden_states, scores, tree_info = select_top_k_tokens(
-                 i, topk_p, topk_index, hidden_states, scores, self.topk
+                 i, topk_logp, topk_index, hidden_states, scores, self.topk
              )
-+            self.mytimer.stop('draft_step_select_top_k')
-+
-             score_list.append(tree_info[0])
-             token_list.append(tree_info[1])
-             parents_list.append(tree_info[2])
-@@ -783,12 +799,18 @@ class EAGLEWorker(TpModelWorker):
-             spec_info.hidden_states = hidden_states
- 
-             # Run forward
-+            self.mytimer.start('draft_step_forward')
-             logits_output, _ = self.draft_model_runner.forward(
-                 forward_batch, skip_attn_backend_init=True
-             )
-+            self.mytimer.stop('draft_step_forward')
-             self._detect_nan_if_needed(logits_output)
-+
-+            self.mytimer.start('draft_step_top_k')
-             probs = torch.softmax(logits_output.next_token_logits, dim=-1)
-             topk_p, topk_index = fast_topk(probs, self.topk, dim=-1)
-+            self.mytimer.stop('draft_step_top_k')
-+
+@@ -795,6 +816,7 @@ class EAGLEWorker(TpModelWorker):
              if self.hot_token_id is not None:
                  topk_index = self.hot_token_id[topk_index]
              hidden_states = logits_output.hidden_states
++            self.mytimer.stop('draft loop')
+ 
+         return score_list, token_list, parents_list
+ 
+diff --git a/python/sglang/srt/speculative/spec_utils.py b/python/sglang/srt/speculative/spec_utils.py
+index f103670..1d188f7 100644
+--- a/python/sglang/srt/speculative/spec_utils.py
++++ b/python/sglang/srt/speculative/spec_utils.py
+@@ -386,7 +386,7 @@ def create_accept_length_filter(
+     return accept_length_filter
+ 
+ 
+-@torch.compile(dynamic=True)
++#@torch.compile(dynamic=True)
+ def select_top_k_tokens(
+     i: int,
+     topk_logp: torch.Tensor,
