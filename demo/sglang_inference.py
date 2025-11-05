@@ -132,6 +132,7 @@ def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True
 def calc_metrics(llm, loop_runner, meta_info, d=3):
     m = meta_info.copy()
     sis = loop_runner.scheduler_internal_state(llm)
+    print('scheduler.draft_worker.mytimer:', sis.get('mytimer', 'Unavailable'))
     if scheduler_avg_accept_len := sis.get('avg_spec_accept_length', None):
         m['scheduler_avg_accept_len'] = round(scheduler_avg_accept_len, d)
     if accept_tokens := m.pop('accept_tokens', []):
