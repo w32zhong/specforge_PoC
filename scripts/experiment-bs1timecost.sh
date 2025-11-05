@@ -27,8 +27,8 @@ for models in \
           experiment_session $session \
             "(flock 200; CUDA_VISIBLE_DEVICES=$devices \
               python -m demo.sglang_inference engine_mode $models \
-                --dtype bfloat16 --disable_cuda_graph \
-                --speculative_algorithm EAGLE \
+                --dtype bfloat16 --disable_cuda_graph $disable_cuda_graph \
+                --speculative_algorithm EAGLE --speculative_tree $tree \
                 --bs $bs --tp_size $tp_size \
                 --mtbench question.jsonl${DATA_RANGE} \
                 --outfile ./output/$session.log;
