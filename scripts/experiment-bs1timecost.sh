@@ -13,12 +13,12 @@ for models in \
   ; do
   for bs in 1; do
     for tree in 6,10,60 3,1,4; do
-      for disable_cuda_graph in True; do
+      for disable_cuda_graph in True False; do
         for tp_size in 2; do
           devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $tp_size)
           let 'cnt+=1'
           echo CUDA_VISIBLE_DEVICES=$devices
-          session="${models}_bs${bs}_tree${tree}"
+          session="${models}_bs${bs}_tree${tree}_noCG${disable_cuda_graph}"
           session=$(experiment_sanitize "$session")
           if tmux has-session -t "exp_$session"; then
             echo "session exists: exp_$session"; continue

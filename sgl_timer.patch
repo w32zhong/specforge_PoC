@@ -31,7 +31,7 @@ index e1d558c..a208299 100644
              ret["step_time_dict"] = self.step_time_dict
  
 diff --git a/python/sglang/srt/speculative/eagle_worker.py b/python/sglang/srt/speculative/eagle_worker.py
-index f0f683b..58c319d 100644
+index f0f683b..2324134 100644
 --- a/python/sglang/srt/speculative/eagle_worker.py
 +++ b/python/sglang/srt/speculative/eagle_worker.py
 @@ -82,6 +82,10 @@ class EAGLEWorker(TpModelWorker):
@@ -137,15 +137,48 @@ index f0f683b..58c319d 100644
  
          # Return values
          score_list: List[torch.Tensor] = []
-@@ -756,6 +776,7 @@ class EAGLEWorker(TpModelWorker):
+@@ -756,9 +776,13 @@ class EAGLEWorker(TpModelWorker):
          # Forward multiple steps
          scores = None
          for i in range(self.speculative_num_steps):
 +            self.mytimer.start('draft loop')
++
++            self.mytimer.start('select_top_k_tokens')
              input_ids, hidden_states, scores, tree_info = select_top_k_tokens(
                  i, topk_logp, topk_index, hidden_states, scores, self.topk
              )
-@@ -795,6 +816,7 @@ class EAGLEWorker(TpModelWorker):
++            self.mytimer.stop('select_top_k_tokens')
+             score_list.append(tree_info[0])
+             token_list.append(tree_info[1])
+             parents_list.append(tree_info[2])
+@@ -767,6 +791,7 @@ class EAGLEWorker(TpModelWorker):
+             if i == self.speculative_num_steps - 1:
+                 break
+ 
++            self.mytimer.start('draft misc.')
+             # Set inputs
+             forward_batch.input_ids = input_ids
+             # This is a temporary fix for the case that the user is using standalone
+@@ -781,20 +806,26 @@ class EAGLEWorker(TpModelWorker):
+             forward_batch.positions.add_(1)
+             forward_batch.attn_backend = self.draft_attn_backend.attn_backends[i]
+             spec_info.hidden_states = hidden_states
++            self.mytimer.stop('draft misc.')
+ 
++            self.mytimer.start('draft forward')
+             # Run forward
+             logits_output, _ = self.draft_model_runner.forward(
+                 forward_batch, skip_attn_backend_init=True
+             )
++            self.mytimer.stop('draft forward')
+ 
+             self._detect_nan_if_needed(logits_output)
++            self.mytimer.start('draft topk')
+             logprobs = torch.nn.functional.log_softmax(
+                 logits_output.next_token_logits, dim=-1
+             )
+             topk_logp, topk_index = fast_topk(logprobs, self.topk, dim=-1)
++            self.mytimer.stop('draft topk')
              if self.hot_token_id is not None:
                  topk_index = self.hot_token_id[topk_index]
              hidden_states = logits_output.hidden_states
@@ -153,16 +186,3 @@ index f0f683b..58c319d 100644
  
          return score_list, token_list, parents_list
  
-diff --git a/python/sglang/srt/speculative/spec_utils.py b/python/sglang/srt/speculative/spec_utils.py
-index f103670..1d188f7 100644
---- a/python/sglang/srt/speculative/spec_utils.py
-+++ b/python/sglang/srt/speculative/spec_utils.py
-@@ -386,7 +386,7 @@ def create_accept_length_filter(
-     return accept_length_filter
- 
- 
--@torch.compile(dynamic=True)
-+#@torch.compile(dynamic=True)
- def select_top_k_tokens(
-     i: int,
-     topk_logp: torch.Tensor,
