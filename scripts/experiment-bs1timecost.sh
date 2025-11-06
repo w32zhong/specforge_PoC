@@ -29,7 +29,7 @@ for models in \
               python -m demo.sglang_inference engine_mode $models \
                 --dtype bfloat16 --disable_cuda_graph $disable_cuda_graph \
                 --speculative_algorithm EAGLE --speculative_tree $tree \
-                --bs $bs --tp_size $tp_size \
+                --bs $bs --tp_size $tp_size --max_new_tokens 2048 \
                 --mtbench question.jsonl${DATA_RANGE} \
                 --outfile ./output/$session.log;
                 echo 'UNLOCK'; flock --unlock 200) 200>gpu_${devices}.lock"
