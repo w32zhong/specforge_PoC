@@ -14,13 +14,17 @@ class TimeStats():
         self._hist = defaultdict(list)
         self._start = defaultdict(float)
 
+    @staticmethod
+    def is_capturing():
+        return torch.cuda.is_current_stream_capturing()
+
     def start(self, key='time'):
-        if self.disable: return
+        if self.disable or self.is_capturing(): return
         torch.cuda.synchronize()
         self._start[key] = time.perf_counter_ns()
 
     def stop(self, key='time', verbose=False):
-        if self.disable: return
+        if self.disable or self.is_capturing(): return
         torch.cuda.synchronize()
 
         dt = time.perf_counter_ns() - self._start[key]
