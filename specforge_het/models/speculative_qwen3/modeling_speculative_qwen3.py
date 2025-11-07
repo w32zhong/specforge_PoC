@@ -7,6 +7,13 @@ class Qwen3Drafter(Qwen3Model):
     def __init__(self, draft_config, base_model):
         draft_config.num_hidden_layers = base_model.config.draft_layers
         draft_config.hidden_size = base_model.get_hidden_size()
+
+        if draft_hidden_size := getattr(base_model.config, 'draft_hidden_size', None):
+            draft_config.hidden_size = draft_hidden_size
+
+        if draft_intermediate_size := getattr(base_model.config, 'draft_intermediate_size', None):
+            draft_config.intermediate_size = draft_intermediate_size
+
         super().__init__(draft_config)
 
         if base_model.config.skip_first_input_layernorm:

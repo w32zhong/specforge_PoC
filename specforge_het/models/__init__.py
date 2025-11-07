@@ -1,6 +1,7 @@
 SGL_MODELS = []
 
 from .algorithms.eagle_v2 import EagleV2
+from .algorithms.experimental import Experimental
 
 from .speculative_llama.modeling_speculative_llama import SpeculativeLlamaForCausalLM, LlamaDrafter
 
