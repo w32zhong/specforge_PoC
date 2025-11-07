@@ -9,7 +9,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 
 from specforge_het.models import *
-from specforge_het.utils import master_print, get_num_parameters
+from specforge_het.utils import *
 
 master_print(transformers.__path__)
 master_print(transformers.__version__)
@@ -73,10 +73,9 @@ def get_state_dict(model_path):
 
 def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs):
     try:
-        if configs.stand_alone_draft_model_path:
-            raise Exception('go to except')
-
         model_path = local_model_path(configs.model_path)
+        if configs.stand_alone_draft_model_path or model_path is None:
+            raise Exception('go to except')
         model = AutoModelForCausalLM.from_pretrained(model_path,
             trust_remote_code=True, **kwargs)
 
@@ -92,6 +91,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
             setattr(base_config, configs.free_base_layers + '_free', n_base_layers)
             setattr(base_config, configs.free_base_layers, 0)
         algo_class_name, algo_kwargs = configs.init_speculative_algorithm
+
         model = eval(base_class_name).from_basemodel(
             base_config, base_model_path,
             AlgoClass=eval(algo_class_name), algo_kwargs=eval(algo_kwargs),

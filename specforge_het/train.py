@@ -234,12 +234,12 @@ def extract_training_args(run_name, configs):
         logging_steps=configs.logging_steps,
         logging_first_step=configs.logging_first_step,
         bf16=configs.bf16,
+        fp16=configs.fp16,
         tf32=configs.tf32,
         report_to=configs.report_to,
         deepspeed=configs.deepspeed,
         ddp_backend=configs.ddp_backend,
         dataloader_drop_last=configs.dataloader_drop_last,
-        eval_on_start=(configs.deepspeed is not None), # to load ckpt to ds_engine
         batch_eval_metrics=True
     )
 
@@ -345,7 +345,6 @@ def main(config_file='configs.ini', **injects):
 
     # potentially setup deepspeed, should be preceding load_models()
     hgf_training_args = extract_training_args(run_name, configs.training)
-    dist.destroy_process_group()
 
     tokenizer, model = load_models(
         configs.modeling, world_size, rank,
