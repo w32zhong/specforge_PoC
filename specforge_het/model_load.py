@@ -146,7 +146,7 @@ def load_speculative_model_if_possible(configs, freeze_base_model=True, **kwargs
     return model
 
 
-def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
+def load_models(configs, world_size=1, rank=0, use_deepspeed=False, attn_impl="eager"):
     tokenizer = AutoTokenizer.from_pretrained(configs.tokenizer_path,
         add_bos_token=False, add_eos_token=False, trust_remote_code=True)
 
@@ -181,11 +181,11 @@ def load_models(configs, world_size=1, rank=0, use_deepspeed=False):
         device_map='auto' if world_size == 1 else f'cuda:{rank}'
 
     model = load_speculative_model_if_possible(configs,
-        attn_implementation="eager", device_map=device_map,
+        attn_implementation=attn_impl, device_map=device_map,
         torch_dtype=eval(configs.dtype), max_memory=configs.max_memory
     )
-    if model.config._attn_implementation != "eager":
-        model.set_attn_implementation("eager")
+    if model.config._attn_implementation != attn_impl:
+        model.set_attn_implementation(attn_impl)
 
     # ensure no module is on an abstract device
     for path, module in model.named_modules():

@@ -348,7 +348,8 @@ def main(config_file='configs.ini', **injects):
 
     tokenizer, model = load_models(
         configs.modeling, world_size, rank,
-        use_deepspeed=configs.training.deepspeed
+        use_deepspeed=configs.training.deepspeed,
+        attn_impl="sdpa"
     )
 
     if configs.training.model_init_ckpt:
