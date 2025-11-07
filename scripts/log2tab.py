@@ -112,6 +112,64 @@ def multi_layer_results(path):
         print()
 
 
+def bs1timecost_results(path):
+    for model in ['meta-llama/Llama-2-7b-chat-hf', 'w32zhong/blooming-silence-78']:
+        for cg in ['--disable_cuda_graph=False', '--disable_cuda_graph=True']:
+            for n, tree in [(3, '--speculative_tree=3,1,4'), (6, '--speculative_tree=6,10,60')]:
+                print([model, cg, tree])
+                m = filter_jsonl(path, '*', argv=[model, cg, tree])
+                fm = first_match(m, '*')
+                print(fm['throughputs'], end=', ')
+                print(fm['avg_accept_len'], end=' | ')
+                j = json.loads(fm['scheduler.draft_worker.mytimer'])
+
+                amortized_norm = j['verify']['cnt'] / j['prefill']['cnt']
+                prefill_or_jit = j['prefill']['mean']
+                amortized_prefill_or_jit = prefill_or_jit / amortized_norm
+                print(round(amortized_prefill_or_jit, 3), end=', ')
+
+                draft = j['draft']['mean']
+                print(round(draft, 3), end=', ')
+
+                verify = j['verify']['mean']
+                print(round(verify, 3), end=', ')
+
+                misc = j['draft_extend']['mean']
+                print(round(misc, 3), end=', ')
+
+                sum_iter = amortized_prefill_or_jit + draft + verify + misc
+                print(round(sum_iter, 3), end=', ')
+
+                real_iter = j['forward_batch_generation']['mean']
+                print(round(real_iter, 3), end=', ')
+
+                proj_throughputs = 1_000 * fm['avg_accept_len'] / sum_iter
+                print(round(proj_throughputs, 3), end=', ')
+
+                draft_select_topk = j['select_top_k_tokens']['mean']
+                print(round(draft_select_topk, 3), end=', ')
+
+                draft_forward = j['draft forward']['mean']
+                print(round(draft_forward, 3), end=', ')
+
+                draft_topk = j['draft topk']['mean']
+                print(round(draft_topk, 3), end=', ')
+
+                draft_loop_proj = draft_select_topk + draft_forward + draft_topk
+                print(round(draft_loop_proj, 3), end=', ')
+
+                draft_loop_real = j['draft loop']['mean']
+                print(round(draft_loop_real, 3), end=', ')
+
+                draft_loopheads = j['draft prepare']['mean'] + j['draft prepare inner']['mean']
+                print(round(draft_loopheads, 3), end=', ')
+
+                proj_draft_time = draft_loopheads + n * (draft_select_topk + draft_forward + draft_topk)
+                print(round(proj_draft_time, 3), end=', ')
+
+                print()
+
+
 def usage_examples():
     example1 = """experiments.jsonl avg_accept_len throughputs --argv "['--bs=4','w32zhong/blooming-silence-78','--speculative_tree=3,1,4']"
     """
@@ -124,5 +182,6 @@ if __name__ == "__main__":
     fire.Fire(dict(
         filter_jsonl=filter_jsonl,
         multi_layer_results=multi_layer_results,
+        bs1timecost_results=bs1timecost_results,
         usage_examples=usage_examples
     ))
