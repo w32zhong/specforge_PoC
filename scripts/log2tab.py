@@ -119,9 +119,10 @@ def bs1timecost_results(path):
                 print([model, cg, tree])
                 m = filter_jsonl(path, '*', argv=[model, cg, tree])
                 fm = first_match(m, '*')
+                j = json.loads(fm['scheduler.draft_worker.mytimer'])
+
                 print(fm['throughputs'], end=', ')
                 print(fm['avg_accept_len'], end=' | ')
-                j = json.loads(fm['scheduler.draft_worker.mytimer'])
 
                 amortized_norm = j['verify']['cnt'] / j['prefill']['cnt']
                 prefill_or_jit = j['prefill']['mean']
@@ -146,26 +147,31 @@ def bs1timecost_results(path):
                 proj_throughputs = 1_000 * fm['avg_accept_len'] / sum_iter
                 print(round(proj_throughputs, 3), end=', ')
 
-                draft_select_topk = j['select_top_k_tokens']['mean']
-                print(round(draft_select_topk, 3), end=', ')
+                if j['draft forward']['cnt'] >= j['draft']['cnt']:
+                    draft_select_topk = j['select_top_k_tokens']['mean']
+                    print(round(draft_select_topk, 3), end=', ')
 
-                draft_forward = j['draft forward']['mean']
-                print(round(draft_forward, 3), end=', ')
+                    draft_forward = j['draft forward']['mean']
+                    print(round(draft_forward, 3), end=', ')
 
-                draft_topk = j['draft topk']['mean']
-                print(round(draft_topk, 3), end=', ')
+                    draft_topk = j['draft topk']['mean']
+                    print(round(draft_topk, 3), end=', ')
 
-                draft_loop_proj = draft_select_topk + draft_forward + draft_topk
-                print(round(draft_loop_proj, 3), end=', ')
+                    draft_loop_proj = draft_select_topk + draft_forward + draft_topk
+                    print(round(draft_loop_proj, 3), end=', ')
 
-                draft_loop_real = j['draft loop']['mean']
-                print(round(draft_loop_real, 3), end=', ')
+                    draft_loop_real = j['draft loop']['mean']
+                    print(round(draft_loop_real, 3), end=', ')
 
-                draft_loopheads = j['draft prepare']['mean'] + j['draft prepare inner']['mean']
-                print(round(draft_loopheads, 3), end=', ')
+                    draft_loopheads = j['draft prepare']['mean'] + j['draft prepare inner']['mean']
+                    print(round(draft_loopheads, 3), end=', ')
 
-                proj_draft_time = draft_loopheads + n * (draft_select_topk + draft_forward + draft_topk)
-                print(round(proj_draft_time, 3), end=', ')
+                    proj_draft_time = draft_loopheads + n * (draft_select_topk + draft_forward + draft_topk)
+                    print(round(proj_draft_time, 3), end=', ')
+
+                else:
+                    # this case is running in CUDA graph replay
+                    pass
 
                 print()
 
