@@ -9,6 +9,7 @@ class Experimental(EagleV2):
                   skip_output_norm=True,
                   draft_hidden_size=1024,
                   draft_intermediate_size=4800,
+                  latent_initializer='random',
                   H_freq=1,
                   L_freq=3,
                   **kwargs):
@@ -21,6 +22,7 @@ class Experimental(EagleV2):
         config.draft_hidden_size = draft_hidden_size
         config.draft_intermediate_size = draft_intermediate_size
 
+        config.latent_initializer = latent_initializer
         config.H_freq = H_freq
         config.L_freq = L_freq
 
@@ -28,11 +30,16 @@ class Experimental(EagleV2):
         target_hidden_size = self.get_hidden_size()
         draft_hidden_size = self.draft_model.get_hidden_size()
 
+        if self.config.latent_initializer == 'learned':
+            self.draft_model.fc_init = torch.nn.Linear(
+                2 * target_hidden_size, draft_hidden_size, bias=True
+            )
+
         self.draft_model.fc = torch.nn.Linear(
             2 * target_hidden_size + draft_hidden_size, draft_hidden_size, bias=True
         )
 
-        self.l2s = torch.nn.Linear(
+        self.draft_model.l2s = torch.nn.Linear(
             draft_hidden_size, target_hidden_size, bias=False
         )
 
@@ -55,8 +62,15 @@ class Experimental(EagleV2):
 
         # (kind of) TTT loop
         for _ in range(self.config.H_freq):
-            z = torch.rand(bs, seq_len, self.config.draft_hidden_size)
-            latents = ((z - 0.5) * 0.2 * 512 / seq_len).to(states.device)
+            if self.config.latent_initializer == 'random':
+                z = torch.rand(bs, seq_len, self.config.draft_hidden_size)
+                latents = ((z - 0.5) * 0.2 * 512 / seq_len).to(states.device)
+            elif self.config.latent_initializer == 'learned':
+                latents = self.draft_model.fc_init(
+                    torch.cat((inputs_embeds, states), dim=-1)
+                )
+            else:
+                raise NotImplementedError
             # RNN loop
             for _ in range(self.config.L_freq):
                 latent_inputs_embeds = self.draft_model.fc(
@@ -68,7 +82,7 @@ class Experimental(EagleV2):
                     **kwargs,
                 )
                 latents = decoder_outputs[0].to(target_hiddens.device)
-            states = self.l2s(latents)
+            states = self.draft_model.l2s(latents)
         predict = states
 
         # Below is kept the same as EagleV2, to control variables.
