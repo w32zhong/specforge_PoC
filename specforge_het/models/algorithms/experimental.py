@@ -64,15 +64,21 @@ class Experimental(EagleV2):
         for _ in range(self.config.H_freq):
             if self.config.latent_initializer == 'random':
                 z = torch.rand(bs, seq_len, self.config.draft_hidden_size)
-                latents = ((z - 0.5) * 0.2 * 512 / seq_len).to(states.device)
+                init_latents = ((z - 0.5) * 0.2 * 512 / seq_len).to(states.device)
             elif self.config.latent_initializer == 'learned':
-                latents = self.draft_model.fc_init(
+                init_latents = self.draft_model.fc_init(
                     torch.cat((inputs_embeds, states), dim=-1)
                 )
             else:
                 raise NotImplementedError
+
             # RNN loop
-            for _ in range(self.config.L_freq):
+            for j in range(self.config.L_freq):
+                if j == 0:
+                    latents = init_latents
+                else:
+                    latents = torch.cat((init_latents[:, :1, :], latents[:, :-1, :]), dim=1)
+
                 latent_inputs_embeds = self.draft_model.fc(
                     torch.cat((inputs_embeds, states, latents), dim=-1)
                 )
@@ -82,6 +88,7 @@ class Experimental(EagleV2):
                     use_cache=False, **kwargs,
                 )
                 latents = decoder_outputs[0].to(target_hiddens.device)
+
             states = self.draft_model.l2s(latents)
         predict = states
 
