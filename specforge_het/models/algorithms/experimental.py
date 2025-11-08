@@ -6,7 +6,7 @@ class Experimental(EagleV2):
     @staticmethod
     def configure(config, draft_layers=1,
                   skip_first_input_layernorm=True,
-                  skip_output_norm=False,
+                  skip_output_norm=True,
                   draft_hidden_size=1408,
                   draft_intermediate_size=5376,
                   latent_initializer='random',
@@ -14,9 +14,11 @@ class Experimental(EagleV2):
                   H_freq=1,
                   L_freq=3,
                   **kwargs):
+
+        config.skip_first_input_layernorm = skip_first_input_layernorm
         super(Experimental, Experimental).configure(config,
                           draft_layers=draft_layers,
-                          skip_first_input_layernorm=skip_first_input_layernorm,
+                          skip_first_input_layernorm=False,
                           skip_output_norm=skip_output_norm,
                           **kwargs)
 
@@ -96,10 +98,17 @@ class Experimental(EagleV2):
                     torch.cat((inputs_embeds, states, latents), dim=-1)
                 )
 
+                save = self.draft_model.layers[0].input_layernorm
+                if self.config.skip_first_input_layernorm and j == 0:
+                    self.draft_model.layers[0].input_layernorm = torch.nn.Identity()
+
                 decoder_outputs = self.draft_model(
                     inputs_embeds=latent_inputs_embeds,
                     use_cache=False, **kwargs,
                 )
+
+                self.draft_model.layers[0].input_layernorm = save
+
                 latents = decoder_outputs[0].to(target_hiddens.device)
 
             states = self.draft_model.l2s(latents)
