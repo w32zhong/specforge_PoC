@@ -6,9 +6,9 @@ class Experimental(EagleV2):
     @staticmethod
     def configure(config, draft_layers=1,
                   skip_first_input_layernorm=True,
-                  skip_output_norm=True,
-                  draft_hidden_size=1024,
-                  draft_intermediate_size=4800,
+                  skip_output_norm=False,
+                  draft_hidden_size=1408,
+                  draft_intermediate_size=5376,
                   latent_initializer='random',
                   H_freq=1,
                   L_freq=3,
