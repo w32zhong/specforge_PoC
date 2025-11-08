@@ -10,6 +10,7 @@ class Experimental(EagleV2):
                   draft_hidden_size=1408,
                   draft_intermediate_size=5376,
                   latent_initializer='random',
+                  shift_latent=False,
                   H_freq=1,
                   L_freq=3,
                   **kwargs):
@@ -25,6 +26,7 @@ class Experimental(EagleV2):
             config.draft_intermediate_size = draft_intermediate_size
 
         config.latent_initializer = latent_initializer
+        config.shift_latent = shift_latent
         config.H_freq = H_freq
         config.L_freq = L_freq
 
@@ -85,8 +87,10 @@ class Experimental(EagleV2):
             for j in range(self.config.L_freq):
                 if j == 0:
                     latents = init_latents
-                else:
+                elif self.config.shift_latent:
                     latents = torch.cat((init_latents[:, :1, :], latents[:, :-1, :]), dim=1)
+                else:
+                    latents = latents
 
                 latent_inputs_embeds = self.draft_model.fc(
                     torch.cat((inputs_embeds, states, latents), dim=-1)
