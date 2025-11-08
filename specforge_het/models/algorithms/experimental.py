@@ -19,16 +19,18 @@ class Experimental(EagleV2):
                           skip_output_norm=skip_output_norm,
                           **kwargs)
 
-        config.draft_hidden_size = draft_hidden_size
-        config.draft_intermediate_size = draft_intermediate_size
+        if draft_hidden_size:
+            config.draft_hidden_size = draft_hidden_size
+        if draft_intermediate_size:
+            config.draft_intermediate_size = draft_intermediate_size
 
         config.latent_initializer = latent_initializer
         config.H_freq = H_freq
         config.L_freq = L_freq
 
     def bind_model(self, load_device='last_device'):
-        target_hidden_size = self.get_hidden_size()
         draft_hidden_size = self.draft_model.get_hidden_size()
+        target_hidden_size = self.get_hidden_size()
 
         if self.config.latent_initializer == 'learned':
             self.draft_model.fc_init = torch.nn.Linear(
@@ -63,8 +65,15 @@ class Experimental(EagleV2):
         # (kind of) TTT loop
         for _ in range(self.config.H_freq):
             if self.config.latent_initializer == 'random':
-                z = torch.rand(bs, seq_len, self.config.draft_hidden_size)
+                draft_hidden_size = self.draft_model.get_hidden_size()
+                z = torch.rand(bs, seq_len, draft_hidden_size)
                 init_latents = ((z - 0.5) * 0.2 * 512 / seq_len).to(states.device)
+
+            elif self.config.latent_initializer == 'zeros':
+                draft_hidden_size = self.draft_model.get_hidden_size()
+                init_latents = torch.zeros(bs, seq_len, draft_hidden_size)
+                init_latents = (init_latents).to(states.device)
+
             elif self.config.latent_initializer == 'learned':
                 init_latents = self.draft_model.fc_init(
                     torch.cat((inputs_embeds, states), dim=-1)
@@ -95,18 +104,20 @@ class Experimental(EagleV2):
         # Below is kept the same as EagleV2, to control variables.
         with torch.no_grad():
             target_logits = self.get_token_logits(target_hiddens)
-            pred_logits = self.get_token_logits(predict)
+            target_logits = target_logits.to(target_hiddens.device)
+            target_p = torch.nn.Softmax(dim=2)(target_logits)
 
         labels = kwargs['labels']
         loss_mask = (labels != -100)
         loss_mask[:, -1] = 0
         loss_mask = loss_mask[:, :, None]
+
+        pred_logits = self.get_token_logits(predict)
+        pred_logits = pred_logits.to(target_hiddens.device)
+        pred_logp = torch.nn.LogSoftmax(dim=2)(pred_logits)
+
         num_items_in_batch = kwargs.get('num_items_in_batch', loss_mask.sum())
 
-        pred_logits = pred_logits.to(target_hiddens.device)
-        target_logits = target_logits.to(target_hiddens.device)
-        pred_logp = torch.nn.LogSoftmax(dim=2)(pred_logits)
-        target_p = torch.nn.Softmax(dim=2)(target_logits)
         plogp = target_p * pred_logp
         ploss = -torch.sum(torch.sum(loss_mask * plogp, 2)) / (num_items_in_batch + 1e-5)
 

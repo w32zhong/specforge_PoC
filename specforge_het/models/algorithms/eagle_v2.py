@@ -147,10 +147,11 @@ class EagleV2:
 
         decoder_outputs = self.draft_model(
             inputs_embeds=inputs_embeds_concate,
-            **kwargs,
+            use_cache=False, **kwargs,
         )
         predict = decoder_outputs[0].to(target_hiddens.device)
 
+        ######################################################
         with torch.no_grad():
             target_logits = self.get_token_logits(target_hiddens)
             target_logits = target_logits.to(target_hiddens.device)
@@ -164,11 +165,16 @@ class EagleV2:
         pred_logits = self.get_token_logits(predict)
         pred_logits = pred_logits.to(target_hiddens.device)
         pred_logp = torch.nn.LogSoftmax(dim=2)(pred_logits)
-        plogp = target_p * pred_logp
 
         num_items_in_batch = kwargs.get('num_items_in_batch', loss_mask.sum())
 
+        plogp = target_p * pred_logp
         ploss = -torch.sum(torch.sum(loss_mask * plogp, 2)) / (num_items_in_batch + 1e-5)
+
+        vloss = self.smooth_l1(predict, target_hiddens)
+        vloss = torch.sum(torch.mean(loss_mask * vloss, 2)) / (num_items_in_batch + 1e-5)
+
+        loss = self.config.ploss_w * ploss + self.config.vloss_w * vloss
 
         ## in-batch accuracy evaluation/print
         base_logits = self.get_token_logits(encoder_outputs)
@@ -180,16 +186,6 @@ class EagleV2:
         if random.random() < 0.02:
             print_predictions(self.tokenizer, input_ids[0, :-1],
                               pred_logits[0, :-1], base_labels[0, 1:])
-        ## DEBUG
-        #from specforge_het.debug import test_nan_grad
-        #ploss.backward()
-        #assert not test_nan_grad(self)
-
-        vloss = self.smooth_l1(predict, target_hiddens)
-        vloss = torch.sum(torch.mean(loss_mask * vloss, 2)) / (num_items_in_batch + 1e-5)
-
-        loss = self.config.ploss_w * ploss + self.config.vloss_w * vloss
-
         return (
             dict(loss=loss, decoder_outputs=decoder_outputs, attention_mask=kwargs['attention_mask']),
             dict(loss=loss, ploss=ploss, vloss=vloss,
