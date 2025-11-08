@@ -48,5 +48,13 @@
     "train_batch_size": "auto",
     "gradient_clipping": "auto",
     "steps_per_print": "auto",
-    "wall_clock_breakdown": false
+    "wall_clock_breakdown": false,
+    "activation_checkpointing": {
+        "partition_activations": true,
+        "contiguous_memory_optimization": true,
+        "cpu_checkpointing": false,
+        "number_checkpoints": null,
+        "synchronize_checkpoint_boundary": false,
+        "profile": false
+    }
 }

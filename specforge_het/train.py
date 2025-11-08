@@ -220,6 +220,7 @@ def extract_training_args(run_name, configs):
         num_train_epochs=configs.num_train_epochs,
         max_steps=configs.max_steps,
         gradient_accumulation_steps=configs.gradient_accumulation_steps,
+        gradient_checkpointing=configs.gradient_checkpointing,
         per_device_train_batch_size=configs.per_device_train_batch_size,
         average_tokens_across_devices=configs.average_tokens_across_devices,
         warmup_steps=configs.warmup_steps,

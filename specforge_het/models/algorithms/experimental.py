@@ -1,5 +1,5 @@
 import torch, random
-from specforge_het.models.algorithms.eagle_v2 import EagleV2, prediction_accuracy
+from specforge_het.models.algorithms.eagle_v2 import EagleV2, print_predictions, prediction_accuracy
 
 class Experimental(EagleV2):
 
@@ -79,7 +79,7 @@ class Experimental(EagleV2):
 
                 decoder_outputs = self.draft_model(
                     inputs_embeds=latent_inputs_embeds,
-                    **kwargs,
+                    use_cache=False, **kwargs,
                 )
                 latents = decoder_outputs[0].to(target_hiddens.device)
             states = self.draft_model.l2s(latents)
