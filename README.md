@@ -40,6 +40,20 @@ Useful options:
 * To add evaluation data: `--dataset.eval_path <path>`.
 * To adjust modeling: `--modeling.init_speculative_algorithm "'EagleV2','dict(draft_layers=2, vloss_w=0.6, ploss_w=0.4)'"`
 
+And using DeepSpeed:
+```sh
+deepspeed --no_local_rank --include=localhost:0,1,2 \
+    ./specforge_het/run_training.py \
+    --dataset.path  /mnt/asus_card/temp/datasets/ds_Qwen3-4B-Instruct-2507 \
+    --dataset.eval_path /mnt/asus_card/temp/datasets/eval_ds_Qwen3-4B-Instruct-2507 \
+    --modeling.dtype torch.float32 --training.bf16 False --training.tf32 True \
+    --@qwen3_4B_base_and_qwen3_4B_drafter_using_eagle2 \
+    --modeling.init_speculative_algorithm "'Experimental','dict(latent_initializer=\'random\')'" \
+    --training.deepspeed ./deepspeed_config_zero3.json \
+    --training.per_device_train_batch_size 1 --training.gradient_accumulation_steps 3 \
+    --training.gradient_checkpointing
+```
+
 Alternatively, download pre-trained models from my HuggingFace hub: https://huggingface.co/w32zhong/models
 
 A robust and fast way to download HuggingFace models is using [hfdownloader](https://github.com/bodaay/HuggingFaceModelDownloader).
