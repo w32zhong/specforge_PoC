@@ -183,7 +183,7 @@ class EagleV2:
         corrects, total = prediction_accuracy(
                               pred_logits[:, :-1], base_labels[:, 1:])
         topk_accuracy = corrects / (total + 1e-5)
-        if random.random() < 0.02:
+        if random.random() < 0.01:
             print_predictions(self.tokenizer, input_ids[0, :-1],
                               pred_logits[0, :-1], base_labels[0, 1:])
         return (
