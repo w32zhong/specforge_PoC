@@ -187,7 +187,10 @@ def acceptlens_histogram(path):
         print(matches)
         import plotext as plt
         plt.hist(samples, bins=len(accept_lens_freqs))
+        xticks = list(range(1, len(accept_lens_freqs) + 1))
+        plt.xticks(xticks, xticks)
         plt.show()
+        plt.clear_figure()
 
 
 def usage_examples():
