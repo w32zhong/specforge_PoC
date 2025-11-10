@@ -22,7 +22,8 @@ class LoopRunner:
         calls in a run_coroutine_threadsafe().
     """
 
-    def __init__(self):
+    def __init__(self, stream_if_bs1=True):
+        self.stream_if_bs1 = stream_if_bs1
         self._loop = None
         self._loop_ready = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -86,7 +87,7 @@ class LoopRunner:
             print(tokenizer.decode(new_ids), end=" ", flush=True)
 
         future.result() # Surface any exception from the background coroutine.
-        return tokenizer.decode(output_ids), meta_info
+        return [tokenizer.decode(output_ids)], [meta_info]
 
     def batch_generate(self, llm, prompts, sampling_params):
         async def _batch_once():
@@ -101,6 +102,12 @@ class LoopRunner:
             batch_meta_info.append(output['meta_info'])
         return batch_new_text, batch_meta_info
 
+    def generate(self, llm, prompts, sampling_params):
+        if len(prompts) == 1 and self.stream_if_bs1:
+            return self.stream_generate(llm, prompts[0], sampling_params)
+        else:
+            return self.batch_generate(llm, prompts, sampling_params)
+
 
 def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True):
     if warm_up:
@@ -108,22 +115,17 @@ def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True
 
     # timed run
     begin = time.perf_counter()
-    if bs > 1:
-        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
-        batch_new_text, batch_meta_info = loop_runner.batch_generate(
-            llm, prompts, sampling_params
-        )
-        for prompt, new_text, mi in zip(prompts, batch_new_text, batch_meta_info):
-            print('=' * 80)
-            print([prompt])
-            print(new_text)
-            meta_info['completion_tokens'] += mi['completion_tokens']
-            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
-    else:
-        print('=' * 80)
-        print(prompts)
-        _, meta_info = loop_runner.stream_generate(llm, prompts[0], sampling_params)
-        print()
+    meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
+    batch_new_text, batch_meta_info = loop_runner.generate(
+        llm, prompts, sampling_params
+    )
+    for prompt, new_text, mi in zip(prompts, batch_new_text, batch_meta_info):
+        print('\n','=' * 80)
+        print([prompt])
+        print(new_text)
+        meta_info['completion_tokens'] += mi['completion_tokens']
+        meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+        meta_info['accept_tokens'] += mi['accept_tokens']
     print('-' * 80)
     meta_info['time_cost'] = time.perf_counter() - begin
     return meta_info
@@ -137,9 +139,10 @@ def calc_metrics(llm, loop_runner, meta_info, d=3):
     if scheduler_avg_accept_len := sis.get('avg_spec_accept_length', None):
         m['scheduler_avg_accept_len'] = round(scheduler_avg_accept_len, d)
     if accept_tokens := m.pop('accept_tokens', []):
-        m['accept_lens'] = [len(ac) for ac in accept_tokens]
-        m['accept_lens.sum'] = sum(m['accept_lens'])
-        m['accept_lens.max'] = max(m['accept_lens'])
+        accept_lens = [len(ac) for ac in accept_tokens]
+        m['accept_lens.sum'] = sum(accept_lens)
+        m['accept_lens.max'] = max(accept_lens)
+        m['accept_lens_100samples'] = accept_lens[:100]
     m['avg_accept_len'] = round(m['completion_tokens'] / m['spec_verify_ct'], d)
     m['throughputs'] = round(m['completion_tokens'] / m['time_cost'], d)
     m['time_cost'] = round(m['time_cost'], 2)
@@ -152,7 +155,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
     skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False,
     sys_prompt=None, mtbench_use_sgl_chat_template=False, hard_exit=False,
-    disallow_outfile_overwrite=False):
+    disallow_outfile_overwrite=False, stream_if_bs1=False):
 
     if disallow_outfile_overwrite and os.path.exists(outfile):
         return
@@ -189,7 +192,7 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     sampling_params = {"temperature": temperature, "max_new_tokens": max_new_tokens}
 
     llm = sgl.Engine(**engine_kwargs)
-    loop_runner = LoopRunner()
+    loop_runner = LoopRunner(stream_if_bs1=stream_if_bs1)
 
     if skip_tokenizer_init:
         llm.tokenizer_manager.tokenizer = AutoTokenizer.from_pretrained(base_model_path,
@@ -243,16 +246,16 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
                 prompt = tokenizer.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=True
                 )
-            batch_new_text, batch_meta_info = loop_runner.batch_generate(
+            batch_new_text, batch_meta_info = loop_runner.generate(
                 llm, [prompt], sampling_params
             )
-            print('=' * 80)
+            print('\n','=' * 80)
             print([prompt])
             print(batch_new_text[0])
             print('-' * 80)
             return batch_new_text[0], batch_meta_info[0]
 
-        meta_info = dict(completion_tokens=0, spec_verify_ct=0)
+        meta_info = dict(completion_tokens=0, spec_verify_ct=0, accept_tokens=[])
 
         begin = time.perf_counter()
         res = run_mtbench(callbk, llm, mtbench, sampling_params,
@@ -266,11 +269,13 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             mi = res.get_meta_info('answer_1')
             meta_info['completion_tokens'] += mi['completion_tokens']
             meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+            meta_info['accept_tokens'] += mi['accept_tokens']
 
             #print(res.get_var('answer_2'))
             mi = res.get_meta_info('answer_2')
             meta_info['completion_tokens'] += mi['completion_tokens']
             meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+            meta_info['accept_tokens'] += mi['accept_tokens']
 
     metrics = calc_metrics(llm, loop_runner, meta_info)
     for key, val in metrics.items():
