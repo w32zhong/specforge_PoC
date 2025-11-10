@@ -176,6 +176,20 @@ def bs1timecost_results(path):
                 print()
 
 
+def acceptlens_histogram(path):
+    for model in [
+        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt',
+        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline']:
+        matches = filter_jsonl(path, 'avg_accept_len', 'accept_lens_freqs', argv=[model])
+        accept_lens_freqs = first_match(matches, 'accept_lens_freqs')
+        samples = [int(l) for l, cnt in accept_lens_freqs.items() for _ in range(cnt)]
+        print(model)
+        print(matches)
+        import plotext as plt
+        plt.hist(samples, bins=len(accept_lens_freqs))
+        plt.show()
+
+
 def usage_examples():
     example1 = """experiments.jsonl avg_accept_len throughputs --argv "['--bs=4','w32zhong/blooming-silence-78','--speculative_tree=3,1,4']"
     """
@@ -189,5 +203,6 @@ if __name__ == "__main__":
         filter_jsonl=filter_jsonl,
         multi_layer_results=multi_layer_results,
         bs1timecost_results=bs1timecost_results,
+        acceptlens_histogram=acceptlens_histogram,
         usage_examples=usage_examples
     ))
