@@ -126,7 +126,7 @@ def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True
         print(new_text)
         meta_info['completion_tokens'] += mi['completion_tokens']
         meta_info['spec_verify_ct'] += mi['spec_verify_ct']
-        meta_info['accept_tokens'] += mi['accept_tokens']
+        meta_info['accept_tokens'] += mi.pop('accept_tokens', [])
     print('-' * 80)
     meta_info['time_cost'] = time.perf_counter() - begin
     return meta_info
@@ -271,13 +271,13 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             mi = res.get_meta_info('answer_1')
             meta_info['completion_tokens'] += mi['completion_tokens']
             meta_info['spec_verify_ct'] += mi['spec_verify_ct']
-            meta_info['accept_tokens'] += mi['accept_tokens']
+            meta_info['accept_tokens'] += mi.pop('accept_tokens', [])
 
             #print(res.get_var('answer_2'))
             mi = res.get_meta_info('answer_2')
             meta_info['completion_tokens'] += mi['completion_tokens']
             meta_info['spec_verify_ct'] += mi['spec_verify_ct']
-            meta_info['accept_tokens'] += mi['accept_tokens']
+            meta_info['accept_tokens'] += mi.pop('accept_tokens', [])
 
     metrics = calc_metrics(llm, loop_runner, meta_info)
     for key, val in metrics.items():

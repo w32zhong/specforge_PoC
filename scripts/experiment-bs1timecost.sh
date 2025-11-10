@@ -14,7 +14,7 @@ for models in \
   for bs in 1; do
     for tree in 6,10,60 3,1,4; do
       for disable_cuda_graph in True False; do
-        for tp_size in 2; do
+        for tp_size in 1; do
           devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $tp_size)
           let 'cnt+=1'
           echo CUDA_VISIBLE_DEVICES=$devices
