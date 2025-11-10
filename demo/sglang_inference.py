@@ -2,6 +2,7 @@ import asyncio
 import threading
 import time, json, os, sys, argparse
 from queue import Queue
+from collections import Counter
 from transformers import AutoTokenizer
 from colorama import Fore, Style
 
@@ -143,6 +144,7 @@ def calc_metrics(llm, loop_runner, meta_info, d=3):
         m['accept_lens.sum'] = sum(accept_lens)
         m['accept_lens.max'] = max(accept_lens)
         m['accept_lens_100samples'] = accept_lens[:100]
+        m['accept_lens_freqs'] = dict(Counter(accept_lens).items())
     m['avg_accept_len'] = round(m['completion_tokens'] / m['spec_verify_ct'], d)
     m['throughputs'] = round(m['completion_tokens'] / m['time_cost'], d)
     m['time_cost'] = round(m['time_cost'], 2)
