@@ -183,10 +183,23 @@ def acceptlens_histogram(path):
         matches = filter_jsonl(path, 'avg_accept_len', 'accept_lens_freqs', argv=[model])
         accept_lens_freqs = first_match(matches, 'accept_lens_freqs')
         samples = [int(l) for l, cnt in accept_lens_freqs.items() for _ in range(cnt)]
+        good, bad = [0] * len(accept_lens_freqs), [0] * len(accept_lens_freqs)
+        good_rate = [0] * (len(accept_lens_freqs) - 1)
+
         print(model)
         print(matches)
+
+        for s in samples:
+            for i in range(s - 1):
+                good[i] += 1
+            bad[s - 1] += 1
+        for i in range(len(accept_lens_freqs) - 1):
+            good_rate[i] = good[i] / (good[i] + bad[i])
+        print([round(r, 2) for r in good_rate])
+
         import plotext as plt
-        plt.hist(samples, bins=len(accept_lens_freqs))
+        #plt.hist(samples, bins=len(accept_lens_freqs))
+        plt.bar(good_rate)
         xticks = list(range(1, len(accept_lens_freqs) + 1))
         plt.xticks(xticks, xticks)
         plt.show()
