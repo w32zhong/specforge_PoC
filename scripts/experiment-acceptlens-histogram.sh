@@ -5,19 +5,13 @@ GPUS=$(experiment_argparse --gpus 1 $@)
 GPU0=$(experiment_argparse --gpu0 0 $@)
 DATA_RANGE=$(experiment_argparse --range "" $@)
 SESSION_END=$(experiment_argparse --session-end "exit" $@)
-ALGORITHM=$(experiment_argparse --algorithm "EAGLE3" $@)
 
 rm -f gpu_*.lock
 cnt=0
 
-## EAGLE-3 ##
 for models in \
-  "meta-llama/Llama-3.1-8B-Instruct --draft_model jamesliu1/sglang-EAGLE3-Llama-3.1-Instruct-8B" \
-  ; do
-
-## EAGLE-2 ##
-#for models in \
-#  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B"; do
+  "meta-llama/Llama-3.1-8B-Instruct --draft_model jamesliu1/sglang-EAGLE3-Llama-3.1-Instruct-8B --algorithm EAGLE3" \
+  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B --algorithm EAGLE"; do
 
   for bs in 1; do
     for tree in 6,10,60 6,1,7; do
@@ -35,7 +29,7 @@ for models in \
             "(flock 200; CUDA_VISIBLE_DEVICES=$devices SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN=1 \
               python -m demo.sglang_inference engine_mode $models \
                 --dtype bfloat16 --disable_cuda_graph $disable_cuda_graph \
-                --speculative_algorithm $ALGORITHM --speculative_tree $tree \
+                --speculative_tree $tree \
                 --bs $bs --tp_size $tp_size --max_new_tokens 2048 \
                 --mtbench question.jsonl${DATA_RANGE} --stream_if_bs1 \
                 --outfile ./output/$session.log;

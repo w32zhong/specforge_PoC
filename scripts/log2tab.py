@@ -181,14 +181,15 @@ def bs1timecost_results(path):
 
 
 def acceptlens_histogram(path):
-    for model in [
-        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt',
-        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline',
-        #'--draft_model=lmsys/sglang-EAGLE-llama2-chat-7B'
+    for filters in [
+        '--draft_model=jamesliu1/sglang-EAGLE3-Llama-3.1-Instruct-8B&--speculative_tree=6,1,7',
+        '--draft_model=jamesliu1/sglang-EAGLE3-Llama-3.1-Instruct-8B&--speculative_tree=6,10,60',
+        '--draft_model=lmsys/sglang-EAGLE-llama2-chat-7B&--speculative_tree=6,1,7'
+        '--draft_model=lmsys/sglang-EAGLE-llama2-chat-7B&--speculative_tree=6,10,60'
     ]:
-        matches = filter_jsonl(path, 'avg_accept_len', 'accept_lens_freqs', argv=[model])
+        matches = filter_jsonl(path, 'avg_accept_len', 'accept_lens_freqs', argv=filters.split('&'))
         accept_lens_freqs = first_match(matches, 'accept_lens_freqs')
-        print(model)
+        print(filters)
         print(matches)
 
         freq = {int(k): v for k, v in accept_lens_freqs.items()}
