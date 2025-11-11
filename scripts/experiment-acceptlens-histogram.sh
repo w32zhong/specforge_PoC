@@ -11,18 +11,18 @@ rm -f gpu_*.lock
 cnt=0
 
 ## EAGLE-3 ##
-#for models in \
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507 --draft_model zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt" \
-#  "Qwen/Qwen3-30B-A3B-Instruct-2507 --draft_model zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline" \
-#  ; do
-#
+for models in \
+  "Qwen/Qwen3-30B-A3B-Instruct-2507 --draft_model zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt" \
+  "Qwen/Qwen3-30B-A3B-Instruct-2507 --draft_model zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline" \
+  ; do
+
 
 ## EAGLE-2 ##
-for models in \
-  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B"; do
+#for models in \
+#  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B"; do
 
   for bs in 1; do
-    for tree in 6,1,7; do
+    for tree in 6,10,60; do
       for disable_cuda_graph in True; do
         for tp_size in $TP_SIZE; do
           devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $tp_size)
