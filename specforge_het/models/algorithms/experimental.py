@@ -12,7 +12,8 @@ class Experimental(EagleV2):
                   latent_initializer='random',
                   shift_latent=False,
                   H_freq=1,
-                  L_freq=3,
+                  L_freq=1,
+                  R_freq=1,
                   **kwargs):
 
         config.skip_first_input_layernorm = skip_first_input_layernorm
@@ -31,6 +32,7 @@ class Experimental(EagleV2):
         config.shift_latent = shift_latent
         config.H_freq = H_freq
         config.L_freq = L_freq
+        config.R_freq = R_freq
 
     def bind_model(self, load_device='last_device'):
         draft_hidden_size = self.draft_model.get_hidden_size()
@@ -85,7 +87,7 @@ class Experimental(EagleV2):
             else:
                 raise NotImplementedError
 
-            # RNN loop
+            # RNN outer loop
             for j in range(self.config.L_freq):
                 if j == 0:
                     latents = init_latents
@@ -98,16 +100,19 @@ class Experimental(EagleV2):
                     torch.cat((inputs_embeds, states, latents), dim=-1)
                 )
 
-                save = self.draft_model.layers[0].input_layernorm
-                if self.config.skip_first_input_layernorm and j == 0:
-                    self.draft_model.layers[0].input_layernorm = torch.nn.Identity()
+                # RNN inner loop
+                for k in range(self.config.R_freq):
+                    save = self.draft_model.layers[0].input_layernorm
+                    if self.config.skip_first_input_layernorm and j == 0:
+                        self.draft_model.layers[0].input_layernorm = torch.nn.Identity()
 
-                decoder_outputs = self.draft_model(
-                    inputs_embeds=latent_inputs_embeds,
-                    use_cache=False, **kwargs,
-                )
+                    decoder_outputs = self.draft_model(
+                        inputs_embeds=latent_inputs_embeds,
+                        use_cache=False, **kwargs,
+                    )
+                    latent_inputs_embeds = decoder_outputs[0].to(latent_inputs_embeds.device)
 
-                self.draft_model.layers[0].input_layernorm = save
+                    self.draft_model.layers[0].input_layernorm = save
 
                 latents = decoder_outputs[0].to(target_hiddens.device)
 
