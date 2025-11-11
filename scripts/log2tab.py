@@ -178,8 +178,10 @@ def bs1timecost_results(path):
 
 def acceptlens_histogram(path):
     for model in [
-        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt',
-        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline']:
+        #'--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt',
+        #'--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline',
+        'w32zhong/blooming-silence-78'
+    ]:
         matches = filter_jsonl(path, 'avg_accept_len', 'accept_lens_freqs', argv=[model])
         accept_lens_freqs = first_match(matches, 'accept_lens_freqs')
         samples = [int(l) for l, cnt in accept_lens_freqs.items() for _ in range(cnt)]
