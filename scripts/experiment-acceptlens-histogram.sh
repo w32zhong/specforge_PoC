@@ -19,7 +19,7 @@ cnt=0
 
 ## EAGLE-2 ##
 for models in \
-  "w32zhong/blooming-silence-78"; do
+  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B"; do
 
   for bs in 1; do
     for tree in 6,1,7; do
