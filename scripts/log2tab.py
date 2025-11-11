@@ -179,27 +179,31 @@ def bs1timecost_results(path):
 def acceptlens_histogram(path):
     for model in [
         #'--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-residual-ttt',
-        #'--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline',
+        '--draft_model=zhuyksir/EAGLE3-Qwen3-30B-A3B-Instruct-2507-baseline',
         'w32zhong/blooming-silence-78'
     ]:
         matches = filter_jsonl(path, 'avg_accept_len', 'accept_lens_freqs', argv=[model])
         accept_lens_freqs = first_match(matches, 'accept_lens_freqs')
-        samples = [int(l) for l, cnt in accept_lens_freqs.items() for _ in range(cnt)]
-        good, bad = [0] * len(accept_lens_freqs), [0] * len(accept_lens_freqs)
-        good_rate = [0] * (len(accept_lens_freqs) - 1)
-
         print(model)
         print(matches)
 
-        for s in samples:
-            for i in range(s - 1):
-                good[i] += 1
-            bad[s - 1] += 1
-        for i in range(len(accept_lens_freqs) - 1):
-            good_rate[i] = good[i] / (good[i] + bad[i])
+        freq = {int(k): v for k, v in accept_lens_freqs.items()}
+        max_len = max(freq)
+        good = [0] * (max_len - 1)
+        bad  = [0] * (max_len - 1)
+        for k, cnt in freq.items():
+            for i in range(k - 1):
+                good[i] += cnt
+            # don't mark a failure when fully accepted
+            if k < max_len:
+                bad[k - 1] += cnt
+
+        good_rate = [good[i] / (good[i] + bad[i]) for i in range(max_len - 1)]
+        print([(g, b) for g,b in zip(good, bad)])
         print([round(r, 2) for r in good_rate])
 
         import plotext as plt
+        #samples = [k for k, cnt in freq.items() for _ in range(cnt)]
         #plt.hist(samples, bins=len(accept_lens_freqs))
         plt.bar(good_rate)
         xticks = list(range(1, len(accept_lens_freqs) + 1))
