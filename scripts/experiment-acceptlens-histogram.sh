@@ -10,8 +10,8 @@ rm -f gpu_*.lock
 cnt=0
 
 for models in \
-  "meta-llama/Llama-3.1-8B-Instruct --draft_model jamesliu1/sglang-EAGLE3-Llama-3.1-Instruct-8B --algorithm EAGLE3" \
-  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B --algorithm EAGLE"; do
+  "meta-llama/Llama-3.1-8B-Instruct --draft_model jamesliu1/sglang-EAGLE3-Llama-3.1-Instruct-8B --speculative_algorithm EAGLE3" \
+  "meta-llama/Llama-2-7b-chat-hf --draft_model lmsys/sglang-EAGLE-llama2-chat-7B --speculative_algorithm EAGLE"; do
 
   for bs in 1; do
     for tree in 6,10,60 6,1,7; do
