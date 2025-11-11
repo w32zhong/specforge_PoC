@@ -10,6 +10,7 @@ experiment_sanitize() {
 	echo $1 |
 		tr '/' '_' |   # translate / → _
 		tr -d ' '  |   # delete spaces
+		tr '.' '_' |   # translate . → _
 		tr -s '_'      # squeeze repeated _
 }
 
