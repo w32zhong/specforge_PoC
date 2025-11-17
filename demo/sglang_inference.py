@@ -166,6 +166,8 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     if draft_model is None:
         base_model_path, draft_model_path = sgl_adapter.adapted(model_path)
     else:
+        if draft_model == 'none': # explicitly using SGL vanilla model
+            draft_model = None
         base_model_path, draft_model_path = model_path, draft_model
 
     engine_kwargs = dict(

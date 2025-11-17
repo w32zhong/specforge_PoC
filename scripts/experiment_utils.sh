@@ -62,6 +62,6 @@ experiment_session() {
 		tmux new-session -c `pwd` -s $session_id -d
 	fi
 	tput bold setaf 3; echo -n "[$session_id] "; tput sgr0
-	tput bold setaf 4; echo $@; tput sgr0
-	tmux send-keys -t $session_id "$@" Enter
+	tput bold setaf 4; echo $*; tput sgr0
+	tmux send-keys -t $session_id "$*" Enter
 }
