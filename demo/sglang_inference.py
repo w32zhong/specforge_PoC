@@ -157,7 +157,8 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
     mtbench=None, outfile=None, log_level="INFO", one_example_warmup=False,
     skip_tokenizer_init=True, mem_fraction_static=0.7, batch_invariant=False,
     sys_prompt=None, mtbench_use_sgl_chat_template=False, hard_exit=False,
-    disallow_outfile_overwrite=False, stream_if_bs1=False):
+    disallow_outfile_overwrite=False, stream_if_bs1=False,
+    speculative_pondering_threshold=0.8, speculative_pondering_options='default'):
 
     if disallow_outfile_overwrite and os.path.exists(outfile):
         return
@@ -190,6 +191,9 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
         speculative_num_steps=speculative_tree[0],
         speculative_eagle_topk=speculative_tree[1],
         speculative_num_draft_tokens=speculative_tree[2],
+        # pondering EAGLE
+        speculative_pondering_threshold=speculative_pondering_threshold,
+        speculative_pondering_options=speculative_pondering_options,
     )
     sampling_params = {"temperature": temperature, "max_new_tokens": max_new_tokens}
 
