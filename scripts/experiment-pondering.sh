@@ -62,12 +62,12 @@ done
 for model in \
   "w32zhong/toasty-durian-227__tau3" \
   ; do
-  for tree in 5,1,6  8,1,9  10,1,11  12,1,13  15,1,16; do
-    for pondering_threshold in 0.6 0.7 0.8 0.9; do
+  for tree in 10,1,11  12,1,13  15,1,16  20,1,21; do
+    for pondering_threshold in 0.8; do
       for pondering_options in random disabled; do
         devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
         let 'cnt+=1'
-        session="pondering_baseline_${model}_${tree}_${pondering_threshold}"
+        session="pondering_baseline_${model}_${tree}_${pondering_threshold}_${pondering_options}"
         session=$(experiment_sanitize "$session")
         if tmux has-session -t "exp_$session"; then
           echo "session exists: exp_$session"; continue
