@@ -61,8 +61,11 @@ done
 # Pondering EAGLE baseline
 for model in \
   "w32zhong/toasty-durian-227__tau3" \
+  "w32zhong/neat-hill-232__pondering_ttt8" \
+  "w32zhong/fearless-river-231__pondering_ttt10" \
+  "w32zhong/confused-snow-233__pondering_ttt12" \
   ; do
-  for tree in 10,1,11  12,1,13  15,1,16  20,1,21; do
+  for tree in 5,1,6  8,1,9  10,1,11  12,1,13  15,1,16  20,1,21; do
     for pondering_threshold in 0.8; do
       for pondering_options in random disabled; do
         devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
@@ -91,7 +94,7 @@ for model in \
   "w32zhong/fearless-river-231__pondering_ttt10" \
   "w32zhong/confused-snow-233__pondering_ttt12" \
   ; do
-  for tree in 10,1,11  12,1,13  15,1,16  20,1,21; do
+  for tree in 5,1,6  8,1,9  10,1,11  12,1,13  15,1,16  20,1,21; do
     for pondering_threshold in 0.8; do
       for pondering_options in default; do
         devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
