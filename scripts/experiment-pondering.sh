@@ -39,8 +39,10 @@ for model in "meta-llama/Meta-Llama-3.1-8B-Instruct"; do
 done
 
 # EAGLE baseline
-for model in "w32zhong/jolly-elevator__pondering_baseline_ep1step120k"; do
-  for tree in 5,1,6 10,1,11; do
+for model in \
+  "w32zhong/jolly-elevator__pondering_baseline_ep1step120k" \
+  "w32zhong/decent-cherry-234__baseline_ttt12"; do
+  for tree in 5,1,6  8,1,9  10,1,11  12,1,13  15,1,16; do
     devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
     let 'cnt+=1'
     session="speculative_baseline_${model}_${tree}"
@@ -60,9 +62,9 @@ done
 for model in \
   "w32zhong/toasty-durian-227__tau3" \
   ; do
-  for tree in 10,1,11; do
+  for tree in 5,1,6  8,1,9  10,1,11  12,1,13  15,1,16; do
     for pondering_threshold in 0.6 0.7 0.8 0.9; do
-      for pondering_options in random; do
+      for pondering_options in random disabled; do
         devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
         let 'cnt+=1'
         session="pondering_baseline_${model}_${tree}_${pondering_threshold}"
@@ -82,45 +84,19 @@ for model in \
   done
 done
 
-# Pondering EAGLE quick model filter
+# Pondering EAGLE
 for model in \
   "w32zhong/toasty-durian-227__tau3" \
-  "w32zhong/eager-violet-228__pondering_tau3_0.1lambda" \
-  "w32zhong/lilac-microwave-225__pondering_tau30" \
-  "w32zhong/kind-star-226__pondering_tau300" \
+  "w32zhong/neat-hill-232__pondering_ttt8" \
+  "w32zhong/fearless-river-231__pondering_ttt10" \
+  "w32zhong/confused-snow-233__pondering_ttt12" \
   ; do
-  for tree in 10,1,11 20,1,21; do
+  for tree in 10,1,11  12,1,13  15,1,16  20,1,21; do
     for pondering_threshold in 0.8; do
       for pondering_options in default; do
         devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
         let 'cnt+=1'
         session="pondering_models_${model}_${tree}_${pondering_threshold}"
-        session=$(experiment_sanitize "$session")
-        if tmux has-session -t "exp_$session"; then
-          echo "session exists: exp_$session"; continue
-        fi
-        run $devices $session \
-          meta-llama/Meta-Llama-3.1-8B-Instruct \
-          --draft_model $model \
-          --speculative_algorithm EAGLE3 \
-          --speculative_tree $tree \
-          --speculative_pondering_threshold $pondering_threshold \
-          --speculative_pondering_options $pondering_options
-      done
-    done
-  done
-done
-
-# Pondering EAGLE grid search
-for model in \
-  "w32zhong/toasty-durian-227__tau3" \
-  ; do
-  for tree in 10,1,11 20,1,21; do
-    for pondering_threshold in 0.5 0.6 0.7 0.8 0.9 1.0; do
-      for pondering_options in default; do
-        devices=$(experiment_alloc_devices $cnt $GPU0 $GPUS $TP_SIZE)
-        let 'cnt+=1'
-        session="pondering_grid_search_${model}_${tree}_${pondering_threshold}"
         session=$(experiment_sanitize "$session")
         if tmux has-session -t "exp_$session"; then
           echo "session exists: exp_$session"; continue
