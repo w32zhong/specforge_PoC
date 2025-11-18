@@ -125,7 +125,7 @@ def run_one_example(llm, loop_runner, prompts, sampling_params, bs, warm_up=True
         print([prompt])
         print(new_text)
         meta_info['completion_tokens'] += mi['completion_tokens']
-        meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+        meta_info['spec_verify_ct'] += mi.get('spec_verify_ct', 0)
         meta_info['accept_tokens'] += mi.pop('accept_tokens', [])
     print('-' * 80)
     meta_info['time_cost'] = time.perf_counter() - begin
@@ -145,7 +145,8 @@ def calc_metrics(llm, loop_runner, meta_info, d=3):
         m['accept_lens.max'] = max(accept_lens)
         m['accept_lens_100samples'] = accept_lens[:100]
         m['accept_lens_freqs'] = dict(Counter(accept_lens).items())
-    m['avg_accept_len'] = round(m['completion_tokens'] / m['spec_verify_ct'], d)
+    if spec_verify_ct := m.pop('spec_verify_ct', 0):
+        m['avg_accept_len'] = round(m['completion_tokens'] / spec_verify_ct, d)
     m['throughputs'] = round(m['completion_tokens'] / m['time_cost'], d)
     m['time_cost'] = round(m['time_cost'], 2)
     return m
@@ -276,13 +277,13 @@ def engine_mode(model_path, draft_model=None, dtype='auto', bs=1, tp_size=1,
             #print(res.get_var('answer_1'))
             mi = res.get_meta_info('answer_1')
             meta_info['completion_tokens'] += mi['completion_tokens']
-            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+            meta_info['spec_verify_ct'] += mi.get('spec_verify_ct', 0)
             meta_info['accept_tokens'] += mi.pop('accept_tokens', [])
 
             #print(res.get_var('answer_2'))
             mi = res.get_meta_info('answer_2')
             meta_info['completion_tokens'] += mi['completion_tokens']
-            meta_info['spec_verify_ct'] += mi['spec_verify_ct']
+            meta_info['spec_verify_ct'] += mi.get('spec_verify_ct', 0)
             meta_info['accept_tokens'] += mi.pop('accept_tokens', [])
 
     metrics = calc_metrics(llm, loop_runner, meta_info)
