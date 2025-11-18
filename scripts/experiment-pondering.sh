@@ -19,6 +19,7 @@ run() {
       python -m demo.sglang_inference engine_mode $@ \
         --dtype bfloat16 --disable_cuda_graph True \
         --bs 1 --tp_size $TP_SIZE --max_new_tokens 2048 \
+        --disallow_outfile_overwrite \
         --mtbench question.jsonl${DATA_RANGE} \
         --outfile ./output/pondering_eagle/$session.log; \
         echo 'UNLOCK'; flock --unlock 200) 200>gpu_${devices}.lock"
