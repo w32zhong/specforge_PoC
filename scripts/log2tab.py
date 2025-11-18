@@ -217,6 +217,50 @@ def acceptlens_histogram(path):
         plt.clear_figure()
 
 
+def pondering_results(path):
+    # Vanilla baseline
+    matches = filter_jsonl(path, 'throughputs', argv=['--draft_model=none'])
+    print('vanilla baseline:', matches)
+
+    # EAGLE baseline
+    for filters in [
+        '--draft_model=w32zhong/jolly-elevator__pondering_baseline_ep1step120k&--speculative_tree=5,1,6',
+        '--draft_model=w32zhong/jolly-elevator__pondering_baseline_ep1step120k&--speculative_tree=10,1,11',
+    ]:
+        matches = filter_jsonl(path, 'avg_accept_len', 'throughputs', argv=filters.split('&'))
+        print(filters, matches[0])
+
+    # Pondering EAGLE baseline
+    for filters in [
+        '--draft_model=w32zhong/toasty-durian-227__tau3&--speculative_pondering_options=random',
+    ]:
+        for t in [0.6, 0.7, 0.8, 0.9]:
+            extra_filters = filters.split('&') + [f'--speculative_pondering_threshold={t}']
+            matches = filter_jsonl(path, 'avg_accept_len', 'throughputs', argv=extra_filters)
+            print(f'random_baseline threshold={t}:', matches)
+
+    # Pondering EAGLE quick model filter
+    for model in [
+        "w32zhong/toasty-durian-227__tau3",
+        "w32zhong/lilac-microwave-225__pondering_tau30",
+        "w32zhong/kind-star-226__pondering_tau300"
+    ]:
+        for tree in ['10,1,11', '20,1,21']:
+            filters = f'--draft_model={model}&--speculative_tree={tree}'.split('&')
+            filters += '--speculative_pondering_threshold=0.8&--speculative_pondering_options=default'.split('&')
+            matches = filter_jsonl(path, 'avg_accept_len', 'throughputs', argv=filters)
+            print(model, tree, matches[0])
+
+    # Pondering EAGLE grid search
+    filters = ['--draft_model=w32zhong/toasty-durian-227__tau3']
+    filters += ['--speculative_pondering_options=default']
+    for tree in ['10,1,11', '20,1,21']:
+        for t in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+            fi = filters + f'--speculative_tree={tree}&--speculative_pondering_threshold={t}'.split('&')
+            matches = filter_jsonl(path, 'avg_accept_len', 'throughputs', argv=fi)
+            print(tree, t, matches)
+
+
 def usage_examples():
     example1 = """experiments.jsonl avg_accept_len throughputs --argv "['--bs=4','w32zhong/blooming-silence-78','--speculative_tree=3,1,4']"
     """
@@ -231,5 +275,6 @@ if __name__ == "__main__":
         multi_layer_results=multi_layer_results,
         bs1timecost_results=bs1timecost_results,
         acceptlens_histogram=acceptlens_histogram,
+        pondering_results=pondering_results,
         usage_examples=usage_examples
     ))
