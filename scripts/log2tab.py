@@ -242,6 +242,7 @@ def pondering_results(path):
     # Pondering EAGLE quick model filter
     for model in [
         "w32zhong/toasty-durian-227__tau3",
+        "w32zhong/eager-violet-228__pondering_tau3_0.1lambda",
         "w32zhong/lilac-microwave-225__pondering_tau30",
         "w32zhong/kind-star-226__pondering_tau300"
     ]:
